@@ -111,7 +111,6 @@ class HatchPackageValidator:
                 return False, [f"Could not load entry point module: {entry_point}"]
                 
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
             
             # Check for each tool
             for tool in tools:
