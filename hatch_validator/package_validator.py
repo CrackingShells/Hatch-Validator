@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional, Callable
 from packaging import version, specifiers
 
-from schemas_retriever import get_package_schema
+from .schemas_retriever import get_package_schema
 
 class PackageValidationError(Exception):
     """Exception raised for package validation errors."""
