@@ -1,3 +1,4 @@
+import ast
 import json
 import logging
 import jsonschema
@@ -106,32 +107,36 @@ class HatchPackageValidator:
         # Import the module
         try:
             module_path = package_dir / entry_point
-            spec = importlib.util.spec_from_file_location("module.name", module_path)
-            if spec is None or spec.loader is None:
-                return False, [f"Could not load entry point module: {entry_point}"]
-                
-            module = importlib.util.module_from_spec(spec)
-            
-            # Check for each tool
-            for tool in tools:
-                tool_name = tool.get('name')
-                if not tool_name:
-                    errors.append(f"Tool missing name in metadata")
-                    all_exist = False
-                    continue
+            with open(module_path, 'r', encoding='utf-8') as file:
+                try:
+                    tree = ast.parse(file.read(), filename=str(module_path))
                     
-                if not hasattr(module, tool_name):
-                    errors.append(f"Tool '{tool_name}' not found in entry point")
-                    all_exist = False
-                    continue
+                    # Get all function names defined in the file
+                    function_names = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
                     
-                # Ensure it's a callable function
-                tool_obj = getattr(module, tool_name)
-                if not callable(tool_obj):
-                    errors.append(f"Tool '{tool_name}' exists but is not a callable function")
-                    all_exist = False
+                    self.logger.debug(f"Found functions in {entry_point}: {function_names}")
+                    
+                    # Check for each tool
+                    for tool in tools:
+                        tool_name = tool.get('name')
+                        if not tool_name:
+                            self.logger.error(f"Tool metadata missing name: {tool}")
+                            errors.append(f"Tool missing name in metadata")
+                            all_exist = False
+                            continue
+                        
+                        # Check if the tool function is defined in the file
+                        if tool_name not in function_names:
+                            self.logger.error(f"Tool '{tool_name}' not found in entry point")
+                            errors.append(f"Tool '{tool_name}' not found in entry point")
+                            all_exist = False
+                    
+                except SyntaxError as e:
+                    self.logger.error(f"Syntax error in {entry_point}: {e}")
+                    return False, [f"Syntax error in {entry_point}: {e}"]
                     
         except Exception as e:
+            self.logger.error(f"Error validating tools: {str(e)}")
             return False, [f"Error validating tools: {str(e)}"]
             
         return all_exist, errors
