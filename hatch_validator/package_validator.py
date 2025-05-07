@@ -1,31 +1,35 @@
+import ast
 import json
 import logging
 import jsonschema
-import importlib.util
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional, Callable
-from packaging import version, specifiers
+from packaging import specifiers
 
-from schemas_retriever import get_package_schema
+from .schemas_retriever import get_package_schema
+from .dependency_resolver import DependencyResolver
 
 class PackageValidationError(Exception):
     """Exception raised for package validation errors."""
     pass
 
 class HatchPackageValidator:
-    def __init__(self, version: str = "latest", allow_local_dependencies: bool = True, force_schema_update: bool = False):
+    def __init__(self, version: str = "latest", allow_local_dependencies: bool = True, 
+                 force_schema_update: bool = False, registry_data: Optional[Dict] = None):
         """Initialize the Hatch package validator.
         
         Args:
             version: Version of the schema to use, or "latest"
             allow_local_dependencies: Whether to allow local dependencies
             force_schema_update: Whether to force a schema update check
+            registry_data: Optional registry data to use for dependency validation
         """
         self.logger = logging.getLogger("hatch.package_validator")
         self.logger.setLevel(logging.INFO)
         self.version = version
         self.allow_local_dependencies = allow_local_dependencies
         self.force_schema_update = force_schema_update
+        self.dependency_resolver = DependencyResolver(registry_data)
     
     def _run_validation(self, validator_func: Callable, *args, **kwargs) -> Tuple[bool, List[str]]: 
         """
@@ -106,44 +110,48 @@ class HatchPackageValidator:
         # Import the module
         try:
             module_path = package_dir / entry_point
-            spec = importlib.util.spec_from_file_location("module.name", module_path)
-            if spec is None or spec.loader is None:
-                return False, [f"Could not load entry point module: {entry_point}"]
-                
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            
-            # Check for each tool
-            for tool in tools:
-                tool_name = tool.get('name')
-                if not tool_name:
-                    errors.append(f"Tool missing name in metadata")
-                    all_exist = False
-                    continue
+            with open(module_path, 'r', encoding='utf-8') as file:
+                try:
+                    tree = ast.parse(file.read(), filename=str(module_path))
                     
-                if not hasattr(module, tool_name):
-                    errors.append(f"Tool '{tool_name}' not found in entry point")
-                    all_exist = False
-                    continue
+                    # Get all function names defined in the file
+                    function_names = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
                     
-                # Ensure it's a callable function
-                tool_obj = getattr(module, tool_name)
-                if not callable(tool_obj):
-                    errors.append(f"Tool '{tool_name}' exists but is not a callable function")
-                    all_exist = False
+                    self.logger.debug(f"Found functions in {entry_point}: {function_names}")
+                    
+                    # Check for each tool
+                    for tool in tools:
+                        tool_name = tool.get('name')
+                        if not tool_name:
+                            self.logger.error(f"Tool metadata missing name: {tool}")
+                            errors.append(f"Tool missing name in metadata")
+                            all_exist = False
+                            continue
+                        
+                        # Check if the tool function is defined in the file
+                        if tool_name not in function_names:
+                            self.logger.error(f"Tool '{tool_name}' not found in entry point")
+                            errors.append(f"Tool '{tool_name}' not found in entry point")
+                            all_exist = False
+                    
+                except SyntaxError as e:
+                    self.logger.error(f"Syntax error in {entry_point}: {e}")
+                    return False, [f"Syntax error in {entry_point}: {e}"]
                     
         except Exception as e:
+            self.logger.error(f"Error validating tools: {str(e)}")
             return False, [f"Error validating tools: {str(e)}"]
             
         return all_exist, errors
     
-    def validate_dependencies(self, metadata: Dict, available_packages: List[Dict] = None) -> Tuple[bool, List[str]]: 
+    def validate_dependencies(self, metadata: Dict, available_packages: Dict[str, Dict] = None) -> Tuple[bool, List[str]]: 
         """
         Validate that all dependencies specified in metadata exist and are compatible.
+        Delegates to DependencyResolver for comprehensive validation.
         
         Args:
             metadata: Package metadata
-            available_packages: List of available packages in the current environment
+            available_packages: Dictionary of available packages by name
             
         Returns:
             Tuple[bool, List[str]]: (is_valid, list of validation errors)
@@ -152,115 +160,53 @@ class HatchPackageValidator:
         is_valid = True
         
         hatch_dependencies = metadata.get('hatch_dependencies', [])
+
+        self.logger.debug(f"{metadata.get('name')} dependencies validation for: {hatch_dependencies}")
         
-        # Check that no local dependencies exist if they're not allowed
+        # Early check for local dependencies if they're not allowed
         if not self.allow_local_dependencies:
             local_deps = [dep for dep in hatch_dependencies if dep.get('type') == 'local']
             if local_deps:
                 for dep in local_deps:
+                    self.logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")
                     errors.append(f"Local dependency '{dep.get('name')}' not allowed in this context")
                 is_valid = False
+                return is_valid, errors
         
-        # Validate local URI paths and additional dependency constraints
-        # that aren't covered by the base JSON Schema
-        for dep in hatch_dependencies:
-            dep_name = dep.get('name')
-            dep_type = dep.get('type', 'remote')  # Default to remote if not specified
-            
-            # Check that local dependencies have a URI
-            if dep_type == 'local':
-                uri = dep.get('uri')
-                if not uri:
-                    errors.append(f"Local dependency '{dep_name}' is missing required field 'uri'")
-                    is_valid = False
-                    continue
-                    
-                # Check URI validity (file:// prefix) - specific to local dependencies
-                if not uri.startswith('file://'):
-                    errors.append(f"Local dependency URI must start with 'file://' for '{dep_name}'")
-                    is_valid = False
-            
-            # Validate version constraint syntax
-            version_constraint = dep.get('version_constraint')
-            if version_constraint:
-                try:
-                    specifiers.SpecifierSet(version_constraint)
-                except Exception as e:
-                    errors.append(f"Invalid version constraint '{version_constraint}' for '{dep_name}': {str(e)}")
-                    is_valid = False
+        # Use the enhanced DependencyResolver for validation
+        validation_valid, validation_errors = self.dependency_resolver.validate_dependencies(
+            hatch_dependencies,
+            available_packages
+        )
         
-        # Validate against available packages if provided
-        if available_packages and is_valid:
-            avail_valid, avail_errors = self._validate_against_available_packages(
-                hatch_dependencies, available_packages
+        if not validation_valid:
+            errors.extend(validation_errors)
+            is_valid = False
+            
+        # Check for circular dependencies
+        try:
+            has_cycles, cycles = self.dependency_resolver.detect_dependency_cycles(
+                hatch_dependencies,
+                available_packages
             )
-            if not avail_valid:
-                errors.extend(avail_errors)
+            if has_cycles:
+                for cycle in cycles:
+                    cycle_str = " -> ".join(cycle)
+                    self.logger.error(f"Circular dependency detected: {cycle_str}")
+                    errors.append(f"Circular dependency detected: {cycle_str}")
                 is_valid = False
+        except Exception as e:
+            self.logger.warning(f"Could not check for circular dependencies: {e}")
         
         return is_valid, errors
-    
-    def _validate_against_available_packages(
-        self, dependencies: List[Dict], available_packages: List[Dict]
-    ) -> Tuple[bool, List[str]]: 
-        """
-        Validate dependencies against available packages.
         
-        Args:
-            dependencies: List of dependency definitions
-            available_packages: List of available packages
-            
-        Returns:
-            Tuple[bool, List[str]]: (is_valid, errors)
-        """
-        errors = []
-        is_valid = True
-        available_pkg_dict = {pkg.get('name'): pkg for pkg in available_packages}
-        
-        for dep in dependencies:
-            dep_name = dep.get('name')
-            dep_type = dep.get('type', 'remote')  # Default to remote if not specified
-            
-            if dep_type == 'local':
-                # For local dependencies, check URI path exists if specified
-                uri = dep.get('uri')
-                if uri and uri.startswith('file://'):
-                    path = Path(uri[7:])
-                    if not path.exists() or not path.is_dir():
-                        errors.append(f"Local dependency path does not exist: {uri}")
-                        is_valid = False
-            else:
-                # For remote dependencies, check if they're in available packages
-                if dep_name not in available_pkg_dict:
-                    errors.append(f"Remote dependency '{dep_name}' not found in available packages")
-                    is_valid = False
-                    continue
-                    
-                # Check version constraint if specified
-                version_constraint = dep.get('version_constraint')
-                if version_constraint:
-                    try:
-                        installed_version = available_pkg_dict[dep_name].get('version')
-                        if installed_version:
-                            spec = specifiers.SpecifierSet(version_constraint)
-                            if not spec.contains(installed_version):
-                                errors.append(
-                                    f"Remote dependency '{dep_name}' version {installed_version} does not satisfy constraint {version_constraint}"
-                                )
-                                is_valid = False
-                    except Exception as e:
-                        errors.append(f"Error checking version constraint for '{dep_name}': {str(e)}")
-                        is_valid = False
-                    
-        return is_valid, errors
-        
-    def validate_package(self, package_dir: Path, available_packages: List[Dict] = None) -> Tuple[bool, Dict[str, Any]]: 
+    def validate_package(self, package_dir: Path, available_packages: Dict[str, Dict] = None) -> Tuple[bool, Dict[str, Any]]: 
         """
         Validate a Hatch package in the specified directory.
         
         Args:
             package_dir: Path to the package directory
-            available_packages: List of available packages in the current environment
+            available_packages: Dictionary of available packages by name
             
         Returns:
             Tuple[bool, Dict[str, Any]]: (is_valid, validation results)
@@ -309,7 +255,7 @@ class HatchPackageValidator:
             results['valid'] = False
             return False, results
         
-        # Validate dependencies
+        # Validate dependencies using enhanced resolver
         deps_valid, deps_errors = self._run_validation(
             self.validate_dependencies, metadata, available_packages
         )
