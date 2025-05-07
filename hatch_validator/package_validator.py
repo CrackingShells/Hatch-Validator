@@ -157,61 +157,135 @@ class HatchPackageValidator:
         
         hatch_dependencies = metadata.get('hatch_dependencies', [])
         
-        # Check that no local dependencies exist if they're not allowed
+        # Early check for local dependencies if they're not allowed
         if not self.allow_local_dependencies:
             local_deps = [dep for dep in hatch_dependencies if dep.get('type') == 'local']
             if local_deps:
                 for dep in local_deps:
+                    self.logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")
                     errors.append(f"Local dependency '{dep.get('name')}' not allowed in this context")
                 is_valid = False
         
-        # Validate local URI paths and additional dependency constraints
-        # that aren't covered by the base JSON Schema
-        for dep in hatch_dependencies:
-            dep_name = dep.get('name')
-            dep_type = dep.get('type', 'remote')  # Default to remote if not specified
-            
-            # Check that local dependencies have a URI
-            if dep_type == 'local':
-                uri = dep.get('uri')
-                if not uri:
-                    errors.append(f"Local dependency '{dep_name}' is missing required field 'uri'")
-                    is_valid = False
-                    continue
-                    
-                # Check URI validity (file:// prefix) - specific to local dependencies
-                if not uri.startswith('file://'):
-                    errors.append(f"Local dependency URI must start with 'file://' for '{dep_name}'")
-                    is_valid = False
-            
-            # Validate version constraint syntax
-            version_constraint = dep.get('version_constraint')
-            if version_constraint:
-                try:
-                    specifiers.SpecifierSet(version_constraint)
-                except Exception as e:
-                    errors.append(f"Invalid version constraint '{version_constraint}' for '{dep_name}': {str(e)}")
-                    is_valid = False
+        # Separate dependencies by type for distinct validation
+        local_dependencies = [dep for dep in hatch_dependencies if dep.get('type', 'remote') == 'local']
+        remote_dependencies = [dep for dep in hatch_dependencies if dep.get('type', 'remote') == 'remote']
         
-        # Validate against available packages if provided
-        if available_packages and is_valid:
-            avail_valid, avail_errors = self._validate_against_available_packages(
-                hatch_dependencies, available_packages
-            )
-            if not avail_valid:
-                errors.extend(avail_errors)
-                is_valid = False
+        # Validate local dependencies
+        local_valid, local_errors = self._validate_local_dependencies(local_dependencies)
+        if not local_valid:
+            errors.extend(local_errors)
+            is_valid = False
+        
+        # Validate remote dependencies against available packages if provided
+        remote_valid, remote_errors = self._validate_remote_dependencies(remote_dependencies, available_packages)
+        if not remote_valid:
+            errors.extend(remote_errors)
+            is_valid = False
         
         return is_valid, errors
     
-    def _validate_against_available_packages(
-        self, dependencies: List[Dict], available_packages: List[Dict]
-    ) -> Tuple[bool, List[str]]: 
+    def _validate_version_constraint(self, dep_name: str, version_constraint: str) -> Tuple[bool, Optional[str]]:
         """
-        Validate dependencies against available packages.
+        Validate the syntax of a version constraint.
         
         Args:
-            dependencies: List of dependency definitions
+            dep_name: Name of the dependency
+            version_constraint: Version constraint string to validate
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (is_valid, error_message)
+        """
+        if not version_constraint:
+            return True, None
+            
+        try:
+            specifiers.SpecifierSet(version_constraint)
+            return True, None
+        except Exception as e:
+            error_msg = f"Invalid version constraint '{version_constraint}' for '{dep_name}': {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
+    
+    def _validate_local_dependencies(self, dependencies: List[Dict]) -> Tuple[bool, List[str]]:
+        """
+        Validate local dependencies, focusing on URI paths and file existence.
+        
+        Args:
+            dependencies: List of local dependency definitions
+            
+        Returns:
+            Tuple[bool, List[str]]: (is_valid, errors)
+        """
+        errors = []
+        is_valid = True
+        
+        for dep in dependencies:
+            dep_name = dep.get('name')
+            uri = dep.get('uri')
+            version_constraint = dep.get('version_constraint')
+            
+            # Validate version constraint if specified
+            constraint_valid, constraint_error = self._validate_version_constraint(dep_name, version_constraint)
+            if not constraint_valid:
+                errors.append(constraint_error)
+                is_valid = False
+
+            # Check that local dependencies have a URI
+            if not uri:
+                self.logger.error(f"Local dependency '{dep_name}' is missing required field 'uri'")
+                errors.append(f"Local dependency '{dep_name}' is missing required field 'uri'")
+                is_valid = False
+                continue
+                
+            # Check URI validity (file:// prefix) - specific to local dependencies
+            if not uri.startswith('file://'):
+                self.logger.error(f"Local dependency URI must start with 'file://' for '{dep_name}'")
+                errors.append(f"Local dependency URI must start with 'file://' for '{dep_name}'")
+                is_valid = False
+                continue
+                
+            # Check URI path exists
+            path = Path(uri[7:])
+            if not path.exists() or not path.is_dir():
+                self.logger.error(f"Local dependency path does not exist: {uri}")
+                errors.append(f"Local dependency path does not exist: {uri}")
+                is_valid = False
+            
+            # Check version constraint against installed version if specified
+            if version_constraint:
+                try:
+                    # If we reached here, it means the local package is valid.
+                    # So, we can assume there is a hatch_metadata.json file in the local package.
+                    # Check if the file exists and read the version from it.
+                    local_metadata_path = path / "hatch_metadata.json"
+                    if local_metadata_path.exists():
+                        with open(local_metadata_path, 'r') as f:
+                            local_metadata = json.load(f)
+                            installed_version = local_metadata.get('version')
+                            
+                            if installed_version:
+                                spec = specifiers.SpecifierSet(version_constraint)
+                                if not spec.contains(installed_version):
+                                    error_msg = f"Local dependency '{dep_name}' version {installed_version} does not satisfy constraint {version_constraint}"
+                                    self.logger.error(error_msg)
+                                    errors.append(error_msg)
+                                    is_valid = False
+                except Exception as e:
+                    error_msg = f"Error checking version constraint for '{dep_name}': {str(e)}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
+                    is_valid = False
+        
+        return is_valid, errors
+    
+    def _validate_remote_dependencies(
+        self, dependencies: List[Dict], available_packages: List[Dict]
+    ) -> Tuple[bool, List[str]]:
+        """
+        Validate remote dependencies against available packages.
+        
+        Args:
+            dependencies: List of remote dependency definitions
             available_packages: List of available packages
             
         Returns:
@@ -223,38 +297,38 @@ class HatchPackageValidator:
         
         for dep in dependencies:
             dep_name = dep.get('name')
-            dep_type = dep.get('type', 'remote')  # Default to remote if not specified
+            version_constraint = dep.get('version_constraint')
             
-            if dep_type == 'local':
-                # For local dependencies, check URI path exists if specified
-                uri = dep.get('uri')
-                if uri and uri.startswith('file://'):
-                    path = Path(uri[7:])
-                    if not path.exists() or not path.is_dir():
-                        errors.append(f"Local dependency path does not exist: {uri}")
-                        is_valid = False
-            else:
-                # For remote dependencies, check if they're in available packages
-                if dep_name not in available_pkg_dict:
-                    errors.append(f"Remote dependency '{dep_name}' not found in available packages")
+            # First validate version constraint syntax
+            constraint_valid, constraint_error = self._validate_version_constraint(dep_name, version_constraint)
+            if not constraint_valid:
+                errors.append(constraint_error)
+                is_valid = False
+                continue
+                
+            # Check if the package exists in available packages
+            if dep_name not in available_pkg_dict:
+                self.logger.error(f"Remote dependency '{dep_name}' not found in available packages")
+                errors.append(f"Remote dependency '{dep_name}' not found in available packages")
+                is_valid = False
+                continue
+                
+            # Check version constraint against available version if specified
+            if version_constraint:
+                try:
+                    available_version = available_pkg_dict[dep_name].get('version')
+                    if available_version:
+                        spec = specifiers.SpecifierSet(version_constraint)
+                        if not spec.contains(available_version):
+                            error_msg = f"Remote dependency '{dep_name}' version {available_version} does not satisfy constraint {version_constraint}"
+                            self.logger.error(error_msg)
+                            errors.append(error_msg)
+                            is_valid = False
+                except Exception as e:
+                    error_msg = f"Error checking version constraint for '{dep_name}': {str(e)}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
                     is_valid = False
-                    continue
-                    
-                # Check version constraint if specified
-                version_constraint = dep.get('version_constraint')
-                if version_constraint:
-                    try:
-                        installed_version = available_pkg_dict[dep_name].get('version')
-                        if installed_version:
-                            spec = specifiers.SpecifierSet(version_constraint)
-                            if not spec.contains(installed_version):
-                                errors.append(
-                                    f"Remote dependency '{dep_name}' version {installed_version} does not satisfy constraint {version_constraint}"
-                                )
-                                is_valid = False
-                    except Exception as e:
-                        errors.append(f"Error checking version constraint for '{dep_name}': {str(e)}")
-                        is_valid = False
                     
         return is_valid, errors
         
