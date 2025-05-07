@@ -2,11 +2,8 @@ import json
 import logging
 import re
 from pathlib import Path
+from collections import deque
 from typing import Dict, List, Set, Tuple, Any, Optional
-from dataclasses import dataclass
-import subprocess
-import sys
-import pkg_resources
 from packaging import version, specifiers
 
 class DependencyResolutionError(Exception):
@@ -19,477 +16,397 @@ class DependencyResolver:
     and registry-based dependency resolution.
     """
     
-    def __init__(self, env_manager=None, registry_path=None):
+    def __init__(self, registry_data=None):
         """Initialize the Dependency resolver.
         
         Args:
-            env_manager: Optional environment manager instance for local package resolution
-            registry_path: Optional path to the registry JSON file for registry-based resolution
+            registry_data: Optional registry data to use for dependency resolution
         """
         self.logger = logging.getLogger("hatch.dependency_resolver")
         self.logger.setLevel(logging.INFO)
-        self.env_manager = env_manager
-        self.registry_path = registry_path
-        
-        # Load registry data if path is provided
-        self.registry_data = None
-        if registry_path:
-            self.registry_data = self._load_registry()
+        self.registry_data = registry_data
     
-    def _load_registry(self) -> dict:
-        """Load the package registry data from file."""
+    def _parse_version_constraint(self, version_spec: str) -> Tuple[Optional[str], Optional[str]]:
+        """Parse a version constraint string into operator and version"""
+        if not version_spec:
+            return None, None
+            
+        match = re.match(r'^([<>=!~]+)(\d+(?:\.\d+)*)$', version_spec)
+        if not match:
+            raise DependencyResolutionError(f"Invalid version constraint: {version_spec}")
+        return match.groups()
+    
+    def validate_version_constraint(self, dep_name: str, version_constraint: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validate the syntax of a version constraint.
+        
+        Args:
+            dep_name: Name of the dependency
+            version_constraint: Version constraint string to validate
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (is_valid, error_message)
+        """
+        if not version_constraint:
+            return True, None
+            
         try:
-            with open(self.registry_path, 'r') as f:
-                return json.load(f)
+            specifiers.SpecifierSet(version_constraint)
+            return True, None
         except Exception as e:
-            self.logger.error(f"Failed to load registry: {e}")
-            return {"repositories": []}
-    
-    def parse_hatch_dependency(self, dep: Dict[str, str]) -> Tuple[str, Optional[str], Optional[str]]:
-        """Parse a Hatch dependency into name, operator, version.
-        
-        Args:
-            dep: Dict format ({"name": "package_name", "version_constraint": ">=1.0.0"})
+            error_msg = f"Invalid version constraint '{version_constraint}' for '{dep_name}': {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
             
-        Returns:
-            Tuple[str, Optional[str], Optional[str]]: (name, operator, version)
-        """
-            
-        pkg_name = dep.get("name")
-        if not pkg_name:
-            raise DependencyResolutionError(f"Invalid dependency object, missing name: {dep}")
-            
-        version_spec = dep.get("version_constraint", "")
-        
-        # Parse version constraint if provided
-        if version_spec:
-            match = re.match(r'^([<>=!~]+)(\d+(?:\.\d+)*)$', version_spec)
-            if not match:
-                raise DependencyResolutionError(f"Invalid version constraint: {version_spec}")
-            operator, version_req = match.groups()
-        else:
-            operator, version_req = None, None
-            
-        return pkg_name, operator, version_req
-    
-    def parse_python_dependency(self, dep: Dict[str, str]) -> Tuple[str, Optional[str], Optional[str], str]:
-        """Parse a Python dependency into name, operator, version and package manager.
-        
-        Args:
-            dep: Dependency in either string format ('package_name>=1.0.0') 
-                 or dict format ({"name": "package_name", "version_constraint": ">=1.0.0", 
-                                 "package_manager": "pip"})
-            
-        Returns:
-            Tuple[str, Optional[str], Optional[str], str]: (name, operator, version, package_manager)
-        """
-        pkg_name = dep.get("name")
-        if not pkg_name:
-            raise DependencyResolutionError(f"Invalid dependency object, missing name: {dep}")
-            
-        version_spec = dep.get("version_constraint", "")
-        
-        # Parse version constraint if provided
-        if version_spec:
-            match = re.match(r'^([<>=!~]+)(\d+(?:\.\d+)*)$', version_spec)
-            if not match:
-                raise DependencyResolutionError(f"Invalid version constraint: {version_spec}")
-            operator, version_req = match.groups()
-        else:
-            operator, version_req = None, None
-            
-        # Get package manager
-        pm = dep.get("package_manager", "pip")
-        if pm not in ["pip", "conda"]:
-            raise DependencyResolutionError(f"Unsupported package manager: {pm}")
-            
-        return pkg_name, operator, version_req, pm
-    
-    def get_available_packages(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get all available packages in the current environment.
-        
-        Returns:
-            Dict[str, Dict[str, Any]]: Dictionary of packages by name
-        """
-        if not self.env_manager:
-            raise DependencyResolutionError("Environment manager is required for this operation")
-            
-        current_env = self.env_manager.get_current_environment()
-        environments = self.env_manager._load_environments()
-        
-        if current_env not in environments:
-            raise DependencyResolutionError(f"Current environment not found: {current_env}")
-        
-        return {
-            pkg.get('name'): pkg for pkg in environments[current_env]['packages']
-        }
-    
-    def is_version_compatible(self, installed_version: str, requirement_operator: str, 
-                             requirement_version: str) -> bool:
+    def is_version_compatible(self, installed_version: str, version_constraint: str) -> bool:
         """
         Check if an installed version is compatible with a requirement.
         
         Args:
             installed_version: The installed version
-            requirement_operator: The requirement operator (e.g. '>=', '==')
-            requirement_version: The required version
+            version_constraint: The version constraint (e.g. '>=1.0.0')
             
         Returns:
             bool: True if compatible, False otherwise
         """
-        if not requirement_operator or not requirement_version:
+        if not version_constraint:
             return True
             
         try:
-            pkg_version = version.parse(installed_version)
-            req_spec = specifiers.SpecifierSet(f"{requirement_operator}{requirement_version}")
-            return req_spec.contains(str(pkg_version))
+            req_spec = specifiers.SpecifierSet(version_constraint)
+            return req_spec.contains(installed_version)
         except Exception as e:
             self.logger.error(f"Error checking version compatibility: {e}")
             return False
     
-    def get_missing_hatch_dependencies(self, dependencies: List[Dict[str, str]]) -> List[Dict[str, Any]]:
-        """
-        Check which Hatch dependencies are missing or don't satisfy version requirements.
-        
-        Args:
-            dependencies: List of dependency objects in format [{"name": "pkg_name", "version_constraint": ">=1.0.0"}, ...]
-            
-        Returns:
-            List[Dict[str, Any]]: List of missing/incompatible dependencies with details
-        """
-        available_packages = self.get_available_packages()
-        missing_deps = []
-        
-        for dep in dependencies:
-            try:
-                pkg_name, operator, version_req = self.parse_hatch_dependency(dep)
-                
-                # Check if package exists
-                if pkg_name not in available_packages:
-                    missing_deps.append({
-                        'reason': 'not_found',
-                        'name': pkg_name,
-                        'operator': operator,
-                        'required_version': version_req
-                    })
-                    continue
-                
-                # Check version if specified
-                if operator and version_req:
-                    installed_version = available_packages[pkg_name].get('version', '0.0.0')
-                    if not self.is_version_compatible(installed_version, operator, version_req):
-                        missing_deps.append({
-                            'reason': 'version_mismatch',
-                            'name': pkg_name,
-                            'installed_version': installed_version,
-                            'operator': operator,
-                            'required_version': version_req
-                        })
-            except Exception as e:
-                self.logger.error(f"Error checking dependency {dep}: {e}")
-                missing_deps.append({
-                    'dependency': dep,
-                    'reason': 'parse_error',
-                    'error': str(e)
-                })
-                
-        return missing_deps
-    
-    def get_missing_python_dependencies(self, dependencies: List[Dict[str, str]]) -> List[Dict[str, Any]]:
-        """
-        Check which Python dependencies are missing or don't satisfy version requirements.
-        
-        Args:
-            dependencies: List of dependency objects in format [{"name": "pkg_name", "version_constraint": ">=1.0.0", "package_manager": "pip"}, ...]
-            
-        Returns:
-            List[Dict[str, Any]]: List of missing/incompatible dependencies with details
-        """
-        installed_packages = {pkg.key: pkg.version for pkg in pkg_resources.working_set}
-        missing_deps = []
-        
-        for dep in dependencies:
-            try:
-                pkg_name, operator, version_req, pm = self.parse_python_dependency(dep)
-                
-                # Check if package is installed
-                if pkg_name not in installed_packages:
-                    missing_deps.append({
-                        'reason': 'not_installed',
-                        'name': pkg_name,
-                        'package_manager': pm,
-                        'operator': operator,
-                        'required_version': version_req
-                    })
-                    
-                # Check version if specified
-                else:
-                    if operator and version_req:
-                        installed_version = installed_packages[pkg_name]
-                        if not self.is_version_compatible(installed_version, operator, version_req):
-                            missing_deps.append({
-                                'reason': 'version_mismatch',
-                                'name': pkg_name,
-                                'installed_version': installed_version,
-                                'operator': operator,
-                                'required_version': version_req,
-                                'package_manager': pm
-                            })
-            except Exception as e:
-                self.logger.error(f"Error checking Python dependency {json.dumps(dep)}: {e}")
-                missing_deps.append({
-                    'dependency': dep,
-                    'reason': 'parse_error',
-                    'error': str(e)
-                })
-                
-        return missing_deps
-    
-    def install_python_dependency(self, pkg_name: str, pm: str = "pip", operator: Optional[str] = None, 
-                                 version_req: Optional[str] = None, dry_run: bool = False) -> bool:
-        """
-        Install a Python dependency.
-        
-        Args:
-            pkg_name: Name of the package to install
-            operator: Version operator (e.g. '>=', '==')
-            version_req: Required version
-            pm: Package manager ('pip' or 'conda')
-            dry_run: If True, only print commands without executing
-            
-        Returns:
-            bool: True if installation was successful, False otherwise
-        """
-        if pm == 'pip':
-            return self._install_with_pip(pkg_name, operator, version_req, dry_run)
-        elif pm == 'conda':
-            return self._install_with_conda(pkg_name, operator, version_req, dry_run)
-        else:
-            self.logger.error(f"Unsupported package manager: {pm}")
-            return False
-    
-    def _install_with_pip(self, pkg_name:str, operator: Optional[str], version_req: Optional[str],
-                           dry_run: bool) -> bool:
-        """Install a dependency using pip."""
-
-        # Construct pip command
-        if operator and version_req:
-            pkg_name = f"{pkg_name}{operator}{version_req}"
-        cmd = [sys.executable, '-m', 'pip', 'install', pkg_name]
-        
-        self.logger.info(f"Running: {' '.join(cmd)}")
-        
-        if dry_run:
-            self.logger.info(f"Would run: {' '.join(cmd)}")
-            return True
-            
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-            self.logger.info(f"Successfully installed dependency: {pkg_name}")
-            return True
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Error installing dependency: {e.stderr}")
-            return False
-    
-    def _install_with_conda(self, pkg_name: str, operator: Optional[str], version_req: Optional[str],
-                            dry_run: bool) -> bool:
-        """Install a dependency using conda."""
-        
-        # Construct conda command
-        if operator and version_req:
-            pkg_name = f"{pkg_name}{operator}{version_req}"
-        cmd = ['conda', 'install', '-y', pkg_name]
-        
-        self.logger.info(f"Running: {' '.join(cmd)}")
-        
-        if dry_run:
-            self.logger.info(f"Would run: {' '.join(cmd)}")
-            return True
-            
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-            self.logger.info(f"Successfully installed dependency: {pkg_name}")
-            return True
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Error installing dependency: {e.stderr}")
-            return False
-        except FileNotFoundError:
-            self.logger.error("Conda not found in PATH")
-            return False
-    
-    def install_hatch_dependency(self, pkg_name: str, version_req: Optional[str] = None,
-                               operator: Optional[str] = None, pkg_registry: Dict[str, str] = None,
-                               dry_run: bool = False) -> bool:
-        """
-        Install a Hatch package dependency.
-        
-        Args:
-            pkg_name: Name of the package to install
-            version_req: Version of the package to install
-            operator: Version operator (e.g. '>=', '==')
-            pkg_registry: Dictionary mapping package names to their repository locations
-            dry_run: If True, only print commands without executing
-            
-        Returns:
-            bool: True if installation was successful, False otherwise
-        """
-        try:            
-            if not pkg_registry:
-                self.logger.error("Package registry is required to install Hatch dependencies.")
-                return False
-            
-            if pkg_name not in pkg_registry:
-                self.logger.error(f"Package not found in registry: {pkg_name}")
-                return False
-                
-            repo_url = pkg_registry[pkg_name]
-            
-            if dry_run:
-                self.logger.info(f"Would install Hatch package {pkg_name} from {repo_url}")
-                return True
-            
-            # TODO: Implement actual package installation from registry
-            # This is a placeholder for the real implementation
-            # this can be handled by the package loader
-            # e.g. self.pkg_loader.add_from_registry(pkg_name, repo_url)
-            
-            self.logger.info(f"Installing Hatch package {pkg_name} from {repo_url}")
-
-            return True
-                
-        except Exception as e:
-            self.logger.error(f"Error installing Hatch dependency {pkg_name}: {e}")
-            return False
-    
-    def resolve_dependencies(self, package_path_or_name, install: bool = False, 
-                            dry_run: bool = False, version: str = None) -> bool:
-        """
-        Resolve all dependencies for a package - either a local package or a registry package.
-        
-        Args:
-            package_path_or_name: Either a Path object to a local package directory or a package name string
-            install: If True, attempt to install missing dependencies
-            dry_run: If True, don't actually install dependencies
-            version: Version string (required if package_path_or_name is a name and not a path)
-            
-        Returns:
-            bool: True if all dependencies are resolved, False otherwise
-        """
-        if isinstance(package_path_or_name, Path) or (isinstance(package_path_or_name, str) and "/" in package_path_or_name):
-            # Local package path provided
-            return self._resolve_local_dependencies(Path(package_path_or_name), install, dry_run)
-        else:
-            # Package name provided
-            if not version:
-                raise DependencyResolutionError("Version is required when resolving dependencies by package name")
-            return self._resolve_registry_dependencies(package_path_or_name, version)
-    
-    def _resolve_local_dependencies(self, package_path: Path, install: bool = False, 
-                                  dry_run: bool = False) -> bool:
-        """
-        Resolve all dependencies for a local package.
-        
-        Args:
-            package_path: Path to the local package directory
-            install: If True, attempt to install missing dependencies
-            dry_run: If True, don't actually install dependencies
-            
-        Returns:
-            bool: True if all dependencies are resolved, False otherwise
-        """
-        if not self.env_manager:
-            raise DependencyResolutionError("Environment manager is required for local dependency resolution")
-            
-        # Load package metadata
+    def _get_local_package_metadata(self, package_path: Path) -> Dict:
+        """Load and return metadata from a local package directory"""
         metadata_path = package_path / "hatch_metadata.json"
         if not metadata_path.exists():
             raise DependencyResolutionError(f"Metadata file not found: {metadata_path}")
         
         try:
             with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
+                return json.load(f)
         except json.JSONDecodeError as e:
             raise DependencyResolutionError(f"Invalid metadata JSON: {e}")
-        
-        results = {
-            'hatch_dependencies': {
-                'required': metadata.get('dependencies', []),
-                'missing': []
-            },
-            'python_dependencies': {
-                'required': metadata.get('python_dependencies', []),
-                'missing': []
-            }
-        }
-        
-        success = True
-
-        # Check Hatch dependencies
-        if results['hatch_dependencies']['required']:
-            results['hatch_dependencies']['missing'] = self.get_missing_hatch_dependencies(results['hatch_dependencies']['required'])
-            
-            # Install missing dependencies if requested
-            if install:
-                for pkg in results['hatch_dependencies']['missing']:
-                    _success = self.install_hatch_dependency(pkg['name'],
-                                                             version_req=pkg.get('version'),
-                                                             operator=pkg.get('operator'),
-                                                             pkg_registry=None, dry_run=dry_run)
-                    
-                    success = success and _success
-        
-        # Check Python dependencies
-        if results['python_dependencies']['required']:
-            results['python_dependencies']['missing'] = self.get_missing_python_dependencies(results['python_dependencies']['required'])
-            
-            # Install missing Python dependencies if requested
-            if install:
-                for pkg in results['python_dependencies']['missing']:
-                    _success = self.install_python_dependency(pkg['name'], pkg.get('package_manager', 'pip'), 
-                                                            pkg.get('operator'), pkg.get('required_version'), dry_run)
-                    
-                    success = success and _success
-        
-        return success
+        except Exception as e:
+            raise DependencyResolutionError(f"Error reading metadata: {e}")
     
-    def _resolve_registry_dependencies(self, package_name: str, version: str) -> Dict:
+    def validate_dependencies(self, dependencies: List[Dict], 
+                            available_packages: Dict[str, Dict] = None,
+                            package_dir: Optional[Path] = None) -> Tuple[bool, List[str]]:
         """
-        Resolve all direct and transitive dependencies for a registry package.
+        Validate all dependencies (local and remote) using a flat, queue-based approach.
         
         Args:
-            package_name: Name of the package
-            version: Version of the package
+            dependencies: List of all dependency definitions
+            available_packages: Dictionary of available packages by name
+            package_dir: Optional base directory for resolving file:// URIs
             
         Returns:
-            Dict with resolved dependencies information:
-                - resolved_packages: List of {name, version} for all Hatch packages
-                - python_dependencies: List of {name, version_constraint, package_manager}
+            Tuple[bool, List[str]]: (is_valid, errors)
         """
-        if not self.registry_data:
-            raise DependencyResolutionError("Registry data is required for registry dependency resolution")
+        errors = []
+        to_validate = deque(dependencies)  # Use a queue
+        validated = set()  # Track processed dependencies by name
+        is_valid = True
+        
+        # Initialize available packages if not provided
+        if available_packages is None:
+            available_packages = {}
+        
+        while to_validate:
+            dep = to_validate.popleft()
+            dep_name = dep.get('name')
             
-        visited = set()
-        resolved_deps = []
-        all_python_deps = {}
+            if not dep_name:
+                errors.append(f"Dependency missing required 'name' field: {dep}")
+                is_valid = False
+                continue
+            
+            # Skip if already validated
+            if dep_name in validated:
+                continue
+                
+            validated.add(dep_name)
+            
+            # Validate version constraint first
+            version_constraint = dep.get('version_constraint')
+            constraint_valid, constraint_error = self.validate_version_constraint(dep_name, version_constraint)
+            if not constraint_valid:
+                errors.append(constraint_error)
+                is_valid = False
+                continue
+                
+            # Handle dependency based on type
+            dep_type = dep.get('type', 'remote')
+            
+            if dep_type == 'local':
+                local_valid, local_dep_errors, transitive_deps = self._validate_local_dependency(dep, package_dir)
+                if not local_valid:
+                    errors.extend(local_dep_errors)
+                    is_valid = False
+                
+                # Add transitive dependencies to the queue
+                for trans_dep in transitive_deps:
+                    if trans_dep.get('name') not in validated:
+                        to_validate.append(trans_dep)
+                        
+            elif dep_type == 'remote':
+                remote_valid, remote_dep_errors = self._validate_remote_dependency(dep, available_packages)
+                if not remote_valid:
+                    errors.extend(remote_dep_errors)
+                    is_valid = False
+                    
+        return is_valid, errors
+    
+    def _validate_local_dependency(self, dep: Dict, base_dir: Optional[Path] = None) -> Tuple[bool, List[str], List[Dict]]:
+        """
+        Validate a local dependency and return any transitive dependencies.
         
-        self._resolve_dep_tree(package_name, version, visited, resolved_deps, all_python_deps)
+        Args:
+            dep: Local dependency definition
+            base_dir: Optional base directory for resolving file:// URIs
+            
+        Returns:
+            Tuple[bool, List[str], List[Dict]]: (is_valid, errors, transitive_dependencies)
+        """
+        errors = []
+        is_valid = True
+        transitive_deps = []
         
-        # Convert python dependencies dict back to list
-        python_deps_list = [
-            {
-                "name": name, 
-                "version_constraint": info["version_constraint"],
-                "package_manager": info["package_manager"]
-            } 
-            for name, info in all_python_deps.items()
-        ]
+        dep_name = dep.get('name')
+        uri = dep.get('uri')
+        version_constraint = dep.get('version_constraint')
+
+        self.logger.debug(f"Validating local dependency '{dep_name}' (version {version_constraint}) with URI '{uri}'")
         
-        return {
-            "resolved_packages": resolved_deps,
-            "python_dependencies": python_deps_list
-        }
+        # Validate URI exists
+        if not uri:
+            error_msg = f"Local dependency '{dep_name}' is missing required field 'uri'"
+            self.logger.error(error_msg)
+            errors.append(error_msg)
+            return False, errors, []
+            
+        # Check URI format
+        if not uri.startswith('file://'):
+            error_msg = f"Local dependency URI must start with 'file://' for '{dep_name}'"
+            self.logger.error(error_msg)
+            errors.append(error_msg)
+            return False, errors, []
+            
+        # Extract path and resolve relative to base_dir if provided
+        path_str = uri[7:]  # Remove "file://"
+        path = Path(path_str)
+        if base_dir and not path.is_absolute():
+            path = base_dir / path
+            
+        # Check path exists
+        if not path.exists() or not path.is_dir():
+            error_msg = f"Local dependency path does not exist: {uri}"
+            self.logger.error(error_msg)
+            errors.append(error_msg)
+            return False, errors, []
+            
+        try:
+            # Load metadata and extract transitive dependencies
+            metadata = self._get_local_package_metadata(path)
+                
+            # Check version compatibility
+            local_version = metadata.get('version')
+            if version_constraint and local_version:
+                if not self.is_version_compatible(local_version, version_constraint):
+                    error_msg = f"Local dependency '{dep_name}' version {local_version} does not satisfy constraint {version_constraint}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
+                    is_valid = False
+            
+            # Get dependencies from this local package
+            transitive_deps = metadata.get('hatch_dependencies', [])
+                
+        except DependencyResolutionError as e:
+            errors.append(str(e))
+            return False, errors, []
+        except Exception as e:
+            errors.append(f"Error validating local dependency '{dep_name}': {str(e)}")
+            return False, errors, []
+            
+        return is_valid, errors, transitive_deps
+    
+    def _validate_remote_dependency(self, dep: Dict, available_packages: Dict) -> Tuple[bool, List[str]]:
+        """
+        Validate a remote dependency against available packages.
+        
+        Args:
+            dep: Remote dependency definition
+            available_packages: Dictionary of available packages by name
+            
+        Returns:
+            Tuple[bool, List[str]]: (is_valid, errors)
+        """
+        errors = []
+        is_valid = True
+        
+        dep_name = dep.get('name')
+        version_constraint = dep.get('version_constraint')
+
+        self.logger.debug(f"Validating remote dependency '{dep_name}' (version {version_constraint})")
+        
+        # Check if the package exists
+        if dep_name not in available_packages:
+            error_msg = f"Remote dependency '{dep_name}' not found in available packages"
+            self.logger.error(error_msg)
+            errors.append(error_msg)
+            return False, errors
+            
+        # Check version constraint against installed version
+        if version_constraint:
+            installed_version = available_packages[dep_name].get('version')
+            if installed_version:
+                if not self.is_version_compatible(installed_version, version_constraint):
+                    error_msg = f"Remote dependency '{dep_name}' version {installed_version} does not satisfy constraint {version_constraint}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
+                    is_valid = False
+                    
+        return is_valid, errors
+    
+    def _build_dependency_graph(self, dependencies: List[Dict], 
+                              available_packages: Dict[str, Dict] = None,
+                              package_dir: Optional[Path] = None) -> Dict[str, List[str]]:
+        """
+        Build a complete dependency graph from initial dependencies.
+        
+        Args:
+            dependencies: List of dependency definitions
+            available_packages: Dictionary of available packages by name
+            package_dir: Optional base directory for resolving file:// URIs
+            
+        Returns:
+            Dict[str, List[str]]: Graph as adjacency list (name -> list of dependencies)
+        """
+        dependency_graph = {}  # name -> list of dependencies
+        unprocessed = deque([(dep.get('name'), dep) for dep in dependencies if dep.get('name')])
+        processed = set()
+        
+        # Initialize available packages if not provided
+        if available_packages is None:
+            available_packages = {}
+        
+        while unprocessed:
+            
+            self.logger.debug(f"Unprocessed: {unprocessed}")
+            self.logger.debug(f"Processed: {processed}")
+
+            dep_name, dep_info = unprocessed.popleft()
+            
+            if dep_name in processed:
+                continue
+                
+            processed.add(dep_name)
+            dependency_graph[dep_name] = []
+            
+            # Handle based on dependency type
+            dep_type = dep_info.get('type', 'remote')
+            
+            if dep_type == 'local':
+                # Extract transitive dependencies from local package
+                uri = dep_info.get('uri')
+                if uri and uri.startswith('file://'):
+                    try:
+                        # Get path
+                        path_str = uri[7:]  # Remove "file://"
+                        path = Path(path_str)
+                        if package_dir and not path.is_absolute():
+                            path = package_dir / path
+                            
+                        # Get metadata
+                        metadata = self._get_local_package_metadata(path)
+                        transitive_deps = metadata.get('hatch_dependencies', [])
+                        
+                        # Add dependencies to the graph
+                        for d in transitive_deps:
+                            d_name = d.get('name')
+                            if d_name:
+                                dependency_graph[dep_name].append(d_name)
+                                
+                                # Add to unprocessed if not already processed
+                                if d_name not in processed:
+                                    unprocessed.append((d_name, d))
+                    except Exception as e:
+                        self.logger.debug(f"Error processing local dependency '{dep_name}': {str(e)}")
+            
+            # For remote dependencies, check registry
+            else:
+                if dep_name in available_packages:
+                    try:
+                        next_deps = available_packages[dep_name].get('hatch_dependencies', [])
+                        dependency_graph[dep_name] += [d['name'] for d in next_deps]
+                        # Add to unprocessed for further processing
+                        unprocessed.extend([(d['name'], d) for d in next_deps])
+                    except Exception as e:
+                        self.logger.debug(f"Error processing remote dependency '{dep_name}': {str(e)}")
+                else:
+                    self.logger.debug(f"Remote dependency '{dep_name}' not found in available packages")
+        
+        self.logger.debug(f"Final dependency graph: {dependency_graph}")
+
+        return dependency_graph
+    
+    def detect_dependency_cycles(self, dependencies: List[Dict], 
+                               available_packages: Dict[str, Dict] = None,
+                               package_dir: Optional[Path] = None) -> Tuple[bool, List[List[str]]]:
+        """
+        Detect circular dependencies in the dependency graph.
+        
+        Args:
+            dependencies: List of dependency definitions
+            available_packages: Dictionary of available packages by name
+            package_dir: Optional base directory for resolving file:// URIs
+            
+        Returns:
+            Tuple[bool, List[List[str]]]: (has_cycles, list_of_cycles)
+        """
+        # Build complete dependency graph first
+        dependency_graph = self._build_dependency_graph(dependencies, available_packages, package_dir)
+        cycles = []
+        
+        # Helper function to find cycles using DFS
+        def find_cycles_for_node(node: str) -> bool:
+            path = []
+            visited = set()
+            
+            def dfs(current: str) -> bool:
+                if current in path:
+                    # Found a cycle
+                    cycle_start = path.index(current)
+                    cycles.append(path[cycle_start:] + [current])
+                    return True
+                    
+                if current in visited:
+                    return False
+                    
+                visited.add(current)
+                path.append(current)
+                
+                has_cycle = False
+                for neighbor in dependency_graph.get(current, []):
+                    if dfs(neighbor):
+                        has_cycle = True
+                
+                path.pop()  # Backtrack
+                return has_cycle
+                
+            return dfs(node)
+        
+        # Check each node for cycles
+        has_cycles = False
+        for node in dependency_graph:
+            if find_cycles_for_node(node):
+                has_cycles = True
+        self.logger.debug(f"Detected cycles: {cycles}")
+        return has_cycles, cycles
     
     def get_full_package_dependencies(self, package_name: str, version: str) -> Dict:
         """
@@ -529,7 +446,7 @@ class DependencyResolver:
             self.logger.error(f"Package {package_name} version {version} not found in registry")
             return {"dependencies": [], "python_dependencies": [], "compatibility": {}}
         
-        # Now we need to rebuild the full dependency data by applying differential changes
+        # Reconstruct the full dependency data by applying differential changes
         return self._reconstruct_dependencies(package_data, version_data)
     
     def _reconstruct_dependencies(self, package_data: Dict, version_data: Dict) -> Dict:
@@ -555,14 +472,14 @@ class DependencyResolver:
         # Apply all changes in the version chain from oldest to newest
         for ver in version_chain:
             # Process Hatch dependencies
-            for dep in ver.get("dependencies_added", []):
+            for dep in ver.get("hatch_dependencies_added", []):
                 dependencies[dep["name"]] = dep.get("version_constraint", "")
                 
-            for dep_name in ver.get("dependencies_removed", []):
+            for dep_name in ver.get("hatch_dependencies_removed", []):
                 if dep_name in dependencies:
                     del dependencies[dep_name]
                     
-            for dep in ver.get("dependencies_modified", []):
+            for dep in ver.get("hatch_dependencies_modified", []):
                 if dep["name"] in dependencies:
                     dependencies[dep["name"]] = dep.get("version_constraint", "")
             
@@ -646,178 +563,21 @@ class DependencyResolver:
         chain.reverse()
         return chain
     
-    def _resolve_dep_tree(
-        self, 
-        package_name: str, 
-        version: str, 
-        visited: Set[str], 
-        resolved_deps: List[Dict], 
-        all_python_deps: Dict
-    ) -> None:
+    def load_registry_data(self, registry_path: str) -> bool:
         """
-        Recursively resolve the dependencies for a package and its dependencies.
+        Load registry data from a file.
         
         Args:
-            package_name: Name of the package
-            version: Version of the package
-            visited: Set of visited package identifiers to detect cycles
-            resolved_deps: List to collect resolved dependencies
-            all_python_deps: Dict to collect all Python dependencies
-        """
-        # Create a unique identifier for this package+version combination
-        pkg_id = f"{package_name}@{version}"
-        
-        # Skip if already visited to prevent infinite recursion
-        if pkg_id in visited:
-            return
-        
-        visited.add(pkg_id)
-        
-        # Get full dependency information for this package version
-        dep_info = self.get_full_package_dependencies(package_name, version)
-        
-        # Add to resolved list
-        resolved_deps.append({"name": package_name, "version": version})
-        
-        # Collect all Python dependencies
-        for py_dep in dep_info.get("python_dependencies", []):
-            name = py_dep["name"]
-            if name not in all_python_deps:
-                all_python_deps[name] = {
-                    "version_constraint": py_dep.get("version_constraint", ""),
-                    "package_manager": py_dep.get("package_manager", "pip")
-                }
-            else:
-                # TODO: Handle version constraint conflicts
-                pass
-        
-        # Recursively resolve Hatch dependencies
-        # TODO: Handle version constraint selection
-        for dep in dep_info.get("dependencies", []):
-            dep_name = dep["name"]
-            # Find the latest version matching the constraint
-            # For now, just use the latest version available
-            dep_version = self._find_latest_version(dep_name, dep.get("version_constraint", ""))
-            if dep_version:
-                self._resolve_dep_tree(dep_name, dep_version, visited, resolved_deps, all_python_deps)
-            else:
-                self.logger.error(f"Could not find a suitable version for dependency {dep_name}")
-    
-    def _find_latest_version(self, package_name: str, version_constraint: str) -> Optional[str]:
-        """
-        Find the latest version of a package that satisfies the version constraint.
-        
-        Args:
-            package_name: Name of the package
-            version_constraint: Version constraint string (e.g., '>=1.0.0')
+            registry_path: Path to the registry JSON file
             
         Returns:
-            The version string, or None if no suitable version found
+            bool: True if registry was successfully loaded
         """
-        # Parse the constraint if provided
-        constraint = None
-        if version_constraint:
-            try:
-                constraint = specifiers.SpecifierSet(version_constraint)
-            except:
-                self.logger.error(f"Invalid version constraint: {version_constraint}")
-                return None
-        
-        available_versions = []
-        
-        # Find all versions of the package across repositories
-        for repo in self.registry_data.get("repositories", []):
-            for pkg in repo.get("packages", []):
-                if pkg["name"] == package_name:
-                    # Add all versions that satisfy the constraint
-                    for ver_data in pkg.get("versions", []):
-                        ver = ver_data["version"]
-                        if not constraint or constraint.contains(ver):
-                            available_versions.append(ver)
-                    
-                    # If we found at least one version, return the latest
-                    if available_versions:
-                        # Sort versions semantically
-                        available_versions.sort(key=lambda v: version.parse(v), reverse=True)
-                        return available_versions[0]
-        
-        return None
-    
-    def check_circular_dependencies(self, package_name: str, version: str) -> Tuple[bool, List[str]]:
-        """
-        Check if a package has circular dependencies.
-        
-        Args:
-            package_name: Name of the package
-            version: Version of the package
-            
-        Returns:
-            Tuple of (has_circular_deps, cycle_path)
-                - has_circular_deps: True if circular dependencies exist
-                - cycle_path: List of package names in the circular dependency path
-        """
-        if not self.registry_data:
-            raise DependencyResolutionError("Registry data is required for this operation")
-            
-        visited = set()
-        path = []
-        cycle_path = []
-        
-        def dfs(curr_pkg, curr_ver):
-            pkg_id = f"{curr_pkg}@{curr_ver}"
-            
-            # If we encounter a package already in our current path, we have a cycle
-            if pkg_id in path:
-                # Extract the cycle
-                cycle_start_idx = path.index(pkg_id)
-                detected_cycle = path[cycle_start_idx:] + [pkg_id]
-                nonlocal cycle_path
-                cycle_path = [p.split('@')[0] for p in detected_cycle]
-                return True
-            
-            # If we've already visited this node via another path, it's safe
-            if pkg_id in visited:
-                return False
-                
-            visited.add(pkg_id)
-            path.append(pkg_id)
-            
-            # Get full dependency information for this package version
-            dep_info = self.get_full_package_dependencies(curr_pkg, curr_ver)
-            
-            # Check each dependency for cycles
-            for dep in dep_info.get("dependencies", []):
-                dep_name = dep["name"]
-                # Find best matching version
-                dep_version = self._find_latest_version(dep_name, dep.get("version_constraint", ""))
-                
-                if dep_version:
-                    if dfs(dep_name, dep_version):
-                        return True
-                else:
-                    self.logger.warning(f"Could not find a suitable version for dependency {dep_name}")
-            
-            # Remove from current path when backtracking
-            path.pop()
-            return False
-        
-        has_circular = dfs(package_name, version)
-        return has_circular, cycle_path
-    
-    def update_registry(self) -> bool:
-        """
-        Reload registry data from file.
-        
-        Returns:
-            bool: True if registry was successfully updated
-        """
-        if not self.registry_path:
-            self.logger.error("Registry path not set")
-            return False
-            
         try:
-            self.registry_data = self._load_registry()
+            with open(registry_path, 'r') as f:
+                self.registry_data = json.load(f)
             return True
         except Exception as e:
-            self.logger.error(f"Failed to update registry: {e}")
+            self.logger.error(f"Failed to load registry: {e}")
+            self.registry_data = {"repositories": []}
             return False
