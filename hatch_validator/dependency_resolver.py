@@ -20,11 +20,12 @@ class DependencyResolver:
         """Initialize the Dependency resolver.
         
         Args:
-            registry_data: Optional registry data to use for dependency resolution
+            registry_data: Registry data to use for dependency resolution
         """
         self.logger = logging.getLogger("hatch.dependency_resolver")
         self.logger.setLevel(logging.INFO)
         self.registry_data = registry_data
+        self._package_cache = {}  # Cache for reconstructed package data
     
     def _parse_version_constraint(self, version_spec: str) -> Tuple[Optional[str], Optional[str]]:
         """Parse a version constraint string into operator and version"""
@@ -94,14 +95,12 @@ class DependencyResolver:
             raise DependencyResolutionError(f"Error reading metadata: {e}")
     
     def validate_dependencies(self, dependencies: List[Dict], 
-                            available_packages: Dict[str, Dict] = None,
                             package_dir: Optional[Path] = None) -> Tuple[bool, List[str]]:
         """
-        Validate all dependencies (local and remote) using a flat, queue-based approach.
+        Validate all dependencies (local and remote) using registry data as source of truth.
         
         Args:
             dependencies: List of all dependency definitions
-            available_packages: Dictionary of available packages by name
             package_dir: Optional base directory for resolving file:// URIs
             
         Returns:
@@ -112,9 +111,8 @@ class DependencyResolver:
         validated = set()  # Track processed dependencies by name
         is_valid = True
         
-        # Initialize available packages if not provided
-        if available_packages is None:
-            available_packages = {}
+        if not self.registry_data:
+            self.logger.warning("No registry data available for remote dependency validation")
         
         while to_validate:
             dep = to_validate.popleft()
@@ -154,7 +152,7 @@ class DependencyResolver:
                         to_validate.append(trans_dep)
                         
             elif dep_type == 'remote':
-                remote_valid, remote_dep_errors = self._validate_remote_dependency(dep, available_packages)
+                remote_valid, remote_dep_errors = self._validate_remote_dependency(dep)
                 if not remote_valid:
                     errors.extend(remote_dep_errors)
                     is_valid = False
@@ -234,13 +232,12 @@ class DependencyResolver:
             
         return is_valid, errors, transitive_deps
     
-    def _validate_remote_dependency(self, dep: Dict, available_packages: Dict) -> Tuple[bool, List[str]]:
+    def _validate_remote_dependency(self, dep: Dict) -> Tuple[bool, List[str]]:
         """
-        Validate a remote dependency against available packages.
+        Validate a remote dependency against registry data.
         
         Args:
             dep: Remote dependency definition
-            available_packages: Dictionary of available packages by name
             
         Returns:
             Tuple[bool, List[str]]: (is_valid, errors)
@@ -253,35 +250,44 @@ class DependencyResolver:
 
         self.logger.debug(f"Validating remote dependency '{dep_name}' (version {version_constraint})")
         
-        # Check if the package exists
-        if dep_name not in available_packages:
-            error_msg = f"Remote dependency '{dep_name}' not found in available packages"
+        # Check if registry data is available
+        if not self.registry_data:
+            error_msg = f"No registry data available to validate remote dependency '{dep_name}'"
+            self.logger.error(error_msg)
+            errors.append(error_msg)
+            return False, errors
+        
+        # Find the package in registry
+        package_data = self.find_package_in_registry(dep_name)
+        if not package_data:
+            error_msg = f"Remote dependency '{dep_name}' not found in registry"
             self.logger.error(error_msg)
             errors.append(error_msg)
             return False, errors
             
-        # Check version constraint against installed version
+        # If version constraint is provided, check compatibility
         if version_constraint:
-            installed_version = available_packages[dep_name].get('version')
-            if installed_version:
-                if not self.is_version_compatible(installed_version, version_constraint):
-                    error_msg = f"Remote dependency '{dep_name}' version {installed_version} does not satisfy constraint {version_constraint}"
-                    self.logger.error(error_msg)
-                    errors.append(error_msg)
-                    is_valid = False
+            version_data = self.get_package_version(dep_name, version_constraint)
+            if not version_data:
+                error_msg = f"No version of '{dep_name}' satisfies constraint {version_constraint}"
+                self.logger.error(error_msg)
+                errors.append(error_msg)
+                is_valid = False
+            else:
+                self.logger.debug(f"Found compatible version {version_data['version']} for '{dep_name}'")
                     
         return is_valid, errors
     
     def _build_dependency_graph(self, dependencies: List[Dict], 
-                              available_packages: Dict[str, Dict] = None,
-                              package_dir: Optional[Path] = None) -> Dict[str, List[str]]:
+                              package_dir: Optional[Path] = None,
+                              pending_update: Optional[Tuple[str, Dict]] = None) -> Dict[str, List[str]]:
         """
-        Build a complete dependency graph from initial dependencies.
+        Build a complete dependency graph from initial dependencies using registry data.
         
         Args:
             dependencies: List of dependency definitions
-            available_packages: Dictionary of available packages by name
             package_dir: Optional base directory for resolving file:// URIs
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Dict[str, List[str]]: Graph as adjacency list (name -> list of dependencies)
@@ -290,12 +296,13 @@ class DependencyResolver:
         unprocessed = deque([(dep.get('name'), dep) for dep in dependencies if dep.get('name')])
         processed = set()
         
-        # Initialize available packages if not provided
-        if available_packages is None:
-            available_packages = {}
+        # Store pending update information if provided
+        pending_pkg_name = None
+        pending_metadata = None
+        if pending_update:
+            pending_pkg_name, pending_metadata = pending_update
         
         while unprocessed:
-            
             self.logger.debug(f"Unprocessed: {unprocessed}")
             self.logger.debug(f"Processed: {processed}")
 
@@ -337,39 +344,68 @@ class DependencyResolver:
                     except Exception as e:
                         self.logger.debug(f"Error processing local dependency '{dep_name}': {str(e)}")
             
-            # For remote dependencies, check registry
+            # For remote dependencies, use registry data
             else:
-                if dep_name in available_packages:
-                    try:
-                        next_deps = available_packages[dep_name].get('hatch_dependencies', [])
-                        dependency_graph[dep_name] += [d['name'] for d in next_deps]
-                        # Add to unprocessed for further processing
-                        unprocessed.extend([(d['name'], d) for d in next_deps])
-                    except Exception as e:
-                        self.logger.debug(f"Error processing remote dependency '{dep_name}': {str(e)}")
-                else:
-                    self.logger.debug(f"Remote dependency '{dep_name}' not found in available packages")
+                try:
+                    # Check if this is the pending update package
+                    if pending_pkg_name and dep_name == pending_pkg_name:
+                        # Use the pending metadata instead of registry data
+                        next_deps = pending_metadata.get('hatch_dependencies', [])
+                        
+                        # Add to graph
+                        for d in next_deps:
+                            d_name = d.get('name')
+                            if d_name:
+                                dependency_graph[dep_name].append(d_name)
+                                
+                                # Add to unprocessed queue
+                                if d_name not in processed:
+                                    unprocessed.append((d_name, d))
+                    else:
+                        # Get latest version or matching version from registry
+                        version_constraint = dep_info.get('version_constraint')
+                        version_data = self.get_package_version(dep_name, version_constraint)
+                        
+                        if version_data:
+                            # Reconstruct full dependencies from registry data
+                            package_data = self.find_package_in_registry(dep_name)
+                            if package_data:
+                                # Get dependencies for this version
+                                deps_data = self.get_full_package_dependencies(dep_name, version_data["version"])
+                                next_deps = deps_data.get("dependencies", [])
+                                
+                                # Add to graph
+                                for d in next_deps:
+                                    d_name = d.get('name')
+                                    if d_name:
+                                        dependency_graph[dep_name].append(d_name)
+                                        
+                                        # Add to unprocessed queue
+                                        if d_name not in processed:
+                                            unprocessed.append((d_name, d))
+                except Exception as e:
+                    self.logger.debug(f"Error processing remote dependency '{dep_name}' from registry: {str(e)}")
         
         self.logger.debug(f"Final dependency graph: {dependency_graph}")
 
         return dependency_graph
     
     def detect_dependency_cycles(self, dependencies: List[Dict], 
-                               available_packages: Dict[str, Dict] = None,
-                               package_dir: Optional[Path] = None) -> Tuple[bool, List[List[str]]]:
+                               package_dir: Optional[Path] = None,
+                               pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, List[List[str]]]:
         """
-        Detect circular dependencies in the dependency graph.
+        Detect circular dependencies in the dependency graph using registry data.
         
         Args:
             dependencies: List of dependency definitions
-            available_packages: Dictionary of available packages by name
             package_dir: Optional base directory for resolving file:// URIs
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Tuple[bool, List[List[str]]]: (has_cycles, list_of_cycles)
         """
         # Build complete dependency graph first
-        dependency_graph = self._build_dependency_graph(dependencies, available_packages, package_dir)
+        dependency_graph = self._build_dependency_graph(dependencies, package_dir, pending_update)
         cycles = []
         
         # Helper function to find cycles using DFS
@@ -581,3 +617,75 @@ class DependencyResolver:
             self.logger.error(f"Failed to load registry: {e}")
             self.registry_data = {"repositories": []}
             return False
+    
+    def find_package_in_registry(self, package_name: str) -> Optional[Dict]:
+        """
+        Find a package in the registry data.
+        
+        Args:
+            package_name: Name of the package to find
+            
+        Returns:
+            Optional[Dict]: Package data if found, None otherwise
+        """
+        if not self.registry_data:
+            self.logger.error("No registry data provided")
+            return None
+            
+        for repo in self.registry_data.get("repositories", []):
+            for pkg in repo.get("packages", []):
+                if pkg["name"] == package_name:
+                    return pkg
+        
+        return None
+        
+    def get_package_version(self, package_name: str, version_constraint: str = None) -> Optional[Dict]:
+        """
+        Get package version data from registry that satisfies the given constraint.
+        If no constraint is provided, returns the latest version.
+        
+        Args:
+            package_name: Name of the package
+            version_constraint: Optional version constraint
+            
+        Returns:
+            Optional[Dict]: Version data if found, None otherwise
+        """
+        package_data = self.find_package_in_registry(package_name)
+        if not package_data:
+            return None
+            
+        if not version_constraint:
+            # Return the latest version
+            latest_version = package_data.get("latest_version")
+            if not latest_version:
+                return None
+                
+            for ver_data in package_data.get("versions", []):
+                if ver_data["version"] == latest_version:
+                    return ver_data
+            return None
+        
+        # Find a version that satisfies the constraint
+        try:
+            req_spec = specifiers.SpecifierSet(version_constraint)
+            valid_versions = []
+            
+            for ver_data in package_data.get("versions", []):
+                if req_spec.contains(ver_data["version"]):
+                    valid_versions.append((ver_data["version"], ver_data))
+                    
+            if not valid_versions:
+                return None
+                
+            # Return the highest matching version
+            valid_versions.sort(key=lambda x: version.parse(x[0]), reverse=True)
+            return valid_versions[0][1]
+            
+        except Exception as e:
+            self.logger.error(f"Error finding compatible version for {package_name}: {e}")
+            return None
+    
+    def clear_cache(self):
+        """Clear the internal package cache"""
+        self._package_cache = {}

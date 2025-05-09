@@ -4,7 +4,6 @@ import logging
 import jsonschema
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional, Callable
-from packaging import specifiers
 
 from .schemas_retriever import get_package_schema
 from .dependency_resolver import DependencyResolver
@@ -22,7 +21,7 @@ class HatchPackageValidator:
             version: Version of the schema to use, or "latest"
             allow_local_dependencies: Whether to allow local dependencies
             force_schema_update: Whether to force a schema update check
-            registry_data: Optional registry data to use for dependency validation
+            registry_data: Registry data to use for dependency validation
         """
         self.logger = logging.getLogger("hatch.package_validator")
         self.logger.setLevel(logging.INFO)
@@ -144,14 +143,16 @@ class HatchPackageValidator:
             
         return all_exist, errors
     
-    def validate_dependencies(self, metadata: Dict, available_packages: Dict[str, Dict] = None) -> Tuple[bool, List[str]]: 
+    def validate_dependencies(self, metadata: Dict, package_dir: Optional[Path] = None,
+                         pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, List[str]]: 
         """
         Validate that all dependencies specified in metadata exist and are compatible.
-        Delegates to DependencyResolver for comprehensive validation.
+        Uses registry data as source of truth for remote dependencies.
         
         Args:
             metadata: Package metadata
-            available_packages: Dictionary of available packages by name
+            package_dir: Optional path to package directory for resolving local dependencies
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Tuple[bool, List[str]]: (is_valid, list of validation errors)
@@ -173,10 +174,10 @@ class HatchPackageValidator:
                 is_valid = False
                 return is_valid, errors
         
-        # Use the enhanced DependencyResolver for validation
+        # Use the dependency resolver for validation
         validation_valid, validation_errors = self.dependency_resolver.validate_dependencies(
             hatch_dependencies,
-            available_packages
+            package_dir
         )
         
         if not validation_valid:
@@ -187,7 +188,8 @@ class HatchPackageValidator:
         try:
             has_cycles, cycles = self.dependency_resolver.detect_dependency_cycles(
                 hatch_dependencies,
-                available_packages
+                package_dir,
+                pending_update
             )
             if has_cycles:
                 for cycle in cycles:
@@ -200,13 +202,14 @@ class HatchPackageValidator:
         
         return is_valid, errors
         
-    def validate_package(self, package_dir: Path, available_packages: Dict[str, Dict] = None) -> Tuple[bool, Dict[str, Any]]: 
+    def validate_package(self, package_dir: Path, pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, Dict[str, Any]]: 
         """
         Validate a Hatch package in the specified directory.
+        Uses registry data for remote dependencies validation.
         
         Args:
             package_dir: Path to the package directory
-            available_packages: Dictionary of available packages by name
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Tuple[bool, Dict[str, Any]]: (is_valid, validation results)
@@ -255,9 +258,9 @@ class HatchPackageValidator:
             results['valid'] = False
             return False, results
         
-        # Validate dependencies using enhanced resolver
+        # Validate dependencies using registry data
         deps_valid, deps_errors = self._run_validation(
-            self.validate_dependencies, metadata, available_packages
+            self.validate_dependencies, metadata, package_dir, pending_update
         )
         results['dependencies']['valid'] = deps_valid
         results['dependencies']['errors'] = deps_errors
