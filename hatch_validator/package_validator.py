@@ -143,7 +143,8 @@ class HatchPackageValidator:
             
         return all_exist, errors
     
-    def validate_dependencies(self, metadata: Dict, package_dir: Optional[Path] = None) -> Tuple[bool, List[str]]: 
+    def validate_dependencies(self, metadata: Dict, package_dir: Optional[Path] = None,
+                         pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, List[str]]: 
         """
         Validate that all dependencies specified in metadata exist and are compatible.
         Uses registry data as source of truth for remote dependencies.
@@ -151,6 +152,7 @@ class HatchPackageValidator:
         Args:
             metadata: Package metadata
             package_dir: Optional path to package directory for resolving local dependencies
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Tuple[bool, List[str]]: (is_valid, list of validation errors)
@@ -186,7 +188,8 @@ class HatchPackageValidator:
         try:
             has_cycles, cycles = self.dependency_resolver.detect_dependency_cycles(
                 hatch_dependencies,
-                package_dir
+                package_dir,
+                pending_update
             )
             if has_cycles:
                 for cycle in cycles:
@@ -199,13 +202,14 @@ class HatchPackageValidator:
         
         return is_valid, errors
         
-    def validate_package(self, package_dir: Path) -> Tuple[bool, Dict[str, Any]]: 
+    def validate_package(self, package_dir: Path, pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, Dict[str, Any]]: 
         """
         Validate a Hatch package in the specified directory.
         Uses registry data for remote dependencies validation.
         
         Args:
             package_dir: Path to the package directory
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Tuple[bool, Dict[str, Any]]: (is_valid, validation results)
@@ -256,7 +260,7 @@ class HatchPackageValidator:
         
         # Validate dependencies using registry data
         deps_valid, deps_errors = self._run_validation(
-            self.validate_dependencies, metadata, package_dir
+            self.validate_dependencies, metadata, package_dir, pending_update
         )
         results['dependencies']['valid'] = deps_valid
         results['dependencies']['errors'] = deps_errors

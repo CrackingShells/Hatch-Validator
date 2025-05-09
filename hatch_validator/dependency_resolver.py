@@ -279,13 +279,15 @@ class DependencyResolver:
         return is_valid, errors
     
     def _build_dependency_graph(self, dependencies: List[Dict], 
-                              package_dir: Optional[Path] = None) -> Dict[str, List[str]]:
+                              package_dir: Optional[Path] = None,
+                              pending_update: Optional[Tuple[str, Dict]] = None) -> Dict[str, List[str]]:
         """
         Build a complete dependency graph from initial dependencies using registry data.
         
         Args:
             dependencies: List of dependency definitions
             package_dir: Optional base directory for resolving file:// URIs
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Dict[str, List[str]]: Graph as adjacency list (name -> list of dependencies)
@@ -294,8 +296,13 @@ class DependencyResolver:
         unprocessed = deque([(dep.get('name'), dep) for dep in dependencies if dep.get('name')])
         processed = set()
         
+        # Store pending update information if provided
+        pending_pkg_name = None
+        pending_metadata = None
+        if pending_update:
+            pending_pkg_name, pending_metadata = pending_update
+        
         while unprocessed:
-            
             self.logger.debug(f"Unprocessed: {unprocessed}")
             self.logger.debug(f"Processed: {processed}")
 
@@ -340,27 +347,42 @@ class DependencyResolver:
             # For remote dependencies, use registry data
             else:
                 try:
-                    # Get latest version or matching version from registry
-                    version_constraint = dep_info.get('version_constraint')
-                    version_data = self.get_package_version(dep_name, version_constraint)
-                    
-                    if version_data:
-                        # Reconstruct full dependencies from registry data
-                        package_data = self.find_package_in_registry(dep_name)
-                        if package_data:
-                            # Get dependencies for this version
-                            deps_data = self.get_full_package_dependencies(dep_name, version_data["version"])
-                            next_deps = deps_data.get("dependencies", [])
-                            
-                            # Add to graph
-                            for d in next_deps:
-                                d_name = d.get('name')
-                                if d_name:
-                                    dependency_graph[dep_name].append(d_name)
-                                    
-                                    # Add to unprocessed queue
-                                    if d_name not in processed:
-                                        unprocessed.append((d_name, d))
+                    # Check if this is the pending update package
+                    if pending_pkg_name and dep_name == pending_pkg_name:
+                        # Use the pending metadata instead of registry data
+                        next_deps = pending_metadata.get('hatch_dependencies', [])
+                        
+                        # Add to graph
+                        for d in next_deps:
+                            d_name = d.get('name')
+                            if d_name:
+                                dependency_graph[dep_name].append(d_name)
+                                
+                                # Add to unprocessed queue
+                                if d_name not in processed:
+                                    unprocessed.append((d_name, d))
+                    else:
+                        # Get latest version or matching version from registry
+                        version_constraint = dep_info.get('version_constraint')
+                        version_data = self.get_package_version(dep_name, version_constraint)
+                        
+                        if version_data:
+                            # Reconstruct full dependencies from registry data
+                            package_data = self.find_package_in_registry(dep_name)
+                            if package_data:
+                                # Get dependencies for this version
+                                deps_data = self.get_full_package_dependencies(dep_name, version_data["version"])
+                                next_deps = deps_data.get("dependencies", [])
+                                
+                                # Add to graph
+                                for d in next_deps:
+                                    d_name = d.get('name')
+                                    if d_name:
+                                        dependency_graph[dep_name].append(d_name)
+                                        
+                                        # Add to unprocessed queue
+                                        if d_name not in processed:
+                                            unprocessed.append((d_name, d))
                 except Exception as e:
                     self.logger.debug(f"Error processing remote dependency '{dep_name}' from registry: {str(e)}")
         
@@ -369,19 +391,21 @@ class DependencyResolver:
         return dependency_graph
     
     def detect_dependency_cycles(self, dependencies: List[Dict], 
-                               package_dir: Optional[Path] = None) -> Tuple[bool, List[List[str]]]:
+                               package_dir: Optional[Path] = None,
+                               pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, List[List[str]]]:
         """
         Detect circular dependencies in the dependency graph using registry data.
         
         Args:
             dependencies: List of dependency definitions
             package_dir: Optional base directory for resolving file:// URIs
+            pending_update: Optional tuple (pkg_name, metadata) with pending update information
             
         Returns:
             Tuple[bool, List[List[str]]]: (has_cycles, list_of_cycles)
         """
         # Build complete dependency graph first
-        dependency_graph = self._build_dependency_graph(dependencies, package_dir)
+        dependency_graph = self._build_dependency_graph(dependencies, package_dir, pending_update)
         cycles = []
         
         # Helper function to find cycles using DFS
