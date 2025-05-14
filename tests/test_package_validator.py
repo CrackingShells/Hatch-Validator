@@ -45,7 +45,7 @@ class TestHatchPackageValidator(unittest.TestCase):
         """
         # Create registry structure according to the schema
         registry = {
-            "registry_schema_version": "1.0.0",
+            "registry_schema_version": "1.1.0",
             "last_updated": datetime.now().isoformat(),
             "repositories": [
                 {
@@ -91,10 +91,11 @@ class TestHatchPackageValidator(unittest.TestCase):
                                 "versions": [
                                     {
                                         "version": metadata.get("version", "1.0.0"),
-                                        "path": str(pkg_path),
-                                        "metadata_path": "hatch_metadata.json",
-                                        "base_version": None,  # First version has no base
-                                        "artifacts": [],
+                                        "release_uri": f"file://{pkg_path}",
+                                        "author": {
+                                            "GitHubID": metadata.get("author", {}).get("name", "test_user"),
+                                            "email": metadata.get("author", {}).get("email", "test@example.com")
+                                        },
                                         "added_date": datetime.now().isoformat(),
                                         # Add dependencies as differential changes
                                         "hatch_dependencies_added": [
@@ -268,6 +269,31 @@ class TestHatchPackageValidator(unittest.TestCase):
         finally:
             # Clean up
             shutil.rmtree(temp_dir)
+            
+    def test_pkg_schema_1_1_0_compliance(self):
+        """Test validating a package explicitly with schema version 1.1.0"""
+        
+        pkg_names = [
+            "arithmetic_pkg", 
+            "base_pkg_1", 
+            "base_pkg_2", 
+            "python_dep_pkg",
+            "circular_dep_pkg_1",
+            "circular_dep_pkg_2",
+            "circular_dep_pkg_2_next_v",
+            "complex_dep_pkg",
+            "simple_dep_pkg",
+            "missing_dep_pkg",
+            "version_dep_pkg"
+        ]
+
+        for pkg_name in pkg_names:
+            pkg_path = self.hatch_dev_path / pkg_name
+            #load the metadata
+            with open(pkg_path / "hatch_metadata.json", 'r') as f:
+                metadata = json.load(f)
+                is_valid, _ = self.validator.validate_pkg_metadata(metadata) 
+                self.assertTrue(is_valid, f"Package {pkg_name} failed schema validation.")
 
 
 if __name__ == "__main__":
