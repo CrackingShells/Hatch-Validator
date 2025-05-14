@@ -5,7 +5,7 @@ import jsonschema
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional, Callable
 
-from .schemas_retriever import get_package_schema
+from .schemas_retriever import get_package_schema, get_registry_schema
 from .dependency_resolver import DependencyResolver
 
 class PackageValidationError(Exception):
@@ -69,6 +69,31 @@ class HatchPackageValidator:
             return True, []
         except jsonschema.exceptions.ValidationError as e:
             return False, [f"Schema validation error: {e.message}"]
+        
+        
+    def validate_registry_metadata(self, metadata: Dict) -> Tuple[bool, List[str]]:
+        """
+        Validate the registry's metadata against the registry JSON schema.
+        
+        Args:
+            metadata: The metadata to validate
+            
+        Returns:
+            Tuple[bool, List[str]]: (is_valid, list of validation errors)
+        """
+        # Load schema using the schema retriever
+        schema = get_registry_schema(version=self.version, force_update=self.force_schema_update)
+        if not schema:
+            error_msg = f"Failed to load registry schema version {self.version}"
+            self.logger.error(error_msg)
+            return False, [error_msg]
+        
+        # Validate against schema
+        try:
+            jsonschema.validate(instance=metadata, schema=schema)
+            return True, []
+        except jsonschema.exceptions.ValidationError as e:
+            return False, [f"Registry validation error: {e.message}"]
     
     def validate_entry_point_exists(self, package_dir: Path, entry_point: str) -> Tuple[bool, List[str]]: 
         """
