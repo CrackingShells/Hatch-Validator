@@ -473,9 +473,7 @@ def get_package_schema(version: str = "latest", force_update: bool = False) -> O
     Returns:
         The package schema as a dictionary, or None if not available
     """
-    # If forcing an update, do it before loading schema
-    if force_update:
-        schema_retriever.check_and_update_schemas(force=True)
+    schema_retriever.check_and_update_schemas(force=force_update)
     
     # Use the schema retriever to load the schema
     return schema_retriever.load_schema("package", version)
@@ -491,10 +489,8 @@ def get_registry_schema(version: str = "latest", force_update: bool = False) -> 
     Returns:
         The registry schema as a dictionary, or None if not available
     """
-    # If forcing an update, do it before loading schema
-    if force_update:
-        schema_retriever.check_and_update_schemas(force=True)
-    
+    schema_retriever.check_and_update_schemas(force=force_update)
+
     # Use the schema retriever to load the schema
     return schema_retriever.load_schema("registry", version)
 
