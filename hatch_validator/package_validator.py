@@ -5,7 +5,7 @@ import jsonschema
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional, Callable
 
-from .schemas_retriever import get_package_schema
+from .schemas_retriever import get_package_schema, get_registry_schema
 from .dependency_resolver import DependencyResolver
 
 class PackageValidationError(Exception):
@@ -46,9 +46,9 @@ class HatchPackageValidator:
         except Exception as e:
             return False, [f"Validation error: {str(e)}"]
     
-    def validate_metadata_schema(self, metadata: Dict) -> Tuple[bool, List[str]]: 
+    def validate_pkg_metadata(self, metadata: Dict) -> Tuple[bool, List[str]]: 
         """
-        Validate the metadata against the JSON schema.
+        Validate the package's metadata against the package JSON schema.
         
         Args:
             metadata: The metadata to validate
@@ -69,6 +69,31 @@ class HatchPackageValidator:
             return True, []
         except jsonschema.exceptions.ValidationError as e:
             return False, [f"Schema validation error: {e.message}"]
+        
+        
+    def validate_registry_metadata(self, metadata: Dict) -> Tuple[bool, List[str]]:
+        """
+        Validate the registry's metadata against the registry JSON schema.
+        
+        Args:
+            metadata: The metadata to validate
+            
+        Returns:
+            Tuple[bool, List[str]]: (is_valid, list of validation errors)
+        """
+        # Load schema using the schema retriever
+        schema = get_registry_schema(version=self.version, force_update=self.force_schema_update)
+        if not schema:
+            error_msg = f"Failed to load registry schema version {self.version}"
+            self.logger.error(error_msg)
+            return False, [error_msg]
+        
+        # Validate against schema
+        try:
+            jsonschema.validate(instance=metadata, schema=schema)
+            return True, []
+        except jsonschema.exceptions.ValidationError as e:
+            return False, [f"Registry validation error: {e.message}"]
     
     def validate_entry_point_exists(self, package_dir: Path, entry_point: str) -> Tuple[bool, List[str]]: 
         """
@@ -166,7 +191,7 @@ class HatchPackageValidator:
         
         # Early check for local dependencies if they're not allowed
         if not self.allow_local_dependencies:
-            local_deps = [dep for dep in hatch_dependencies if dep.get('type') == 'local']
+            local_deps = [dep for dep in hatch_dependencies if dep.get('type').get('type') == 'local']
             if local_deps:
                 for dep in local_deps:
                     self.logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")
@@ -248,7 +273,7 @@ class HatchPackageValidator:
         
         # Validate metadata schema
         schema_valid, schema_errors = self._run_validation(
-            self.validate_metadata_schema, metadata
+            self.validate_pkg_metadata, metadata
         )
         results['metadata_schema']['valid'] = schema_valid
         results['metadata_schema']['errors'] = schema_errors

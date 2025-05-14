@@ -27,13 +27,12 @@ class TestHatchPackageValidator(unittest.TestCase):
     def setUp(self):
         """Set up test environment before each test."""
         # Path to Hatch-Dev packages
-        self.hatch_dev_path = Path(__file__).parent.parent.parent / "Hatch-Dev"
+        self.hatch_dev_path = Path(__file__).parent.parent.parent / "Hatching-Dev"
         self.assertTrue(self.hatch_dev_path.exists(), 
                         f"Hatch-Dev directory not found at {self.hatch_dev_path}")
                         
         # Build registry data structure from Hatch-Dev packages
         self.registry_data = self._build_test_registry()
-        logger.debug(f"Built the base test registry: {json.dumps(self.registry_data, indent=2)}")
         
         # Create validator with registry data
         self.validator = HatchPackageValidator(registry_data=self.registry_data)
@@ -45,7 +44,7 @@ class TestHatchPackageValidator(unittest.TestCase):
         """
         # Create registry structure according to the schema
         registry = {
-            "registry_schema_version": "1.0.0",
+            "registry_schema_version": "1.1.0",
             "last_updated": datetime.now().isoformat(),
             "repositories": [
                 {
@@ -91,10 +90,11 @@ class TestHatchPackageValidator(unittest.TestCase):
                                 "versions": [
                                     {
                                         "version": metadata.get("version", "1.0.0"),
-                                        "path": str(pkg_path),
-                                        "metadata_path": "hatch_metadata.json",
-                                        "base_version": None,  # First version has no base
-                                        "artifacts": [],
+                                        "release_uri": f"file://{pkg_path}",
+                                        "author": {
+                                            "GitHubID": metadata.get("author", {}).get("name", "test_user"),
+                                            "email": metadata.get("author", {}).get("email", "test@example.com")
+                                        },
                                         "added_date": datetime.now().isoformat(),
                                         # Add dependencies as differential changes
                                         "hatch_dependencies_added": [
@@ -208,36 +208,22 @@ class TestHatchPackageValidator(unittest.TestCase):
         
     def test_circular_dependency_packages(self):
         """Test validating packages involved in a circular dependency."""
-        # First package (circular_dep_pkg_1)
-        pkg1_path = self.hatch_dev_path / "circular_dep_pkg_1"
+        #load the metadata for circular_dep_pkg_2_next_v
+        pkg_path = self.hatch_dev_path / "circular_dep_pkg_2_next_v"
+        with open(pkg_path / "hatch_metadata.json", 'r') as f:
+            metadata = json.load(f)
+
+            # Validate - should detect the circular dependency
+            is_valid, results = self.validator.validate_package(pkg_path, ("circular_dep_pkg_2", metadata))
+
+            self.assertFalse(is_valid)
+            self.assertFalse(results["valid"])
+            self.assertFalse(results["dependencies"]["valid"])
         
-        # Create a registry with a circular dependency
-        circular_registry = self.registry_data.copy()
+            # Check if any error message mentions circular dependency
+            any_error_mentions_circular = any("circular" in error.lower() for error in results["dependencies"]["errors"])
+            self.assertTrue(any_error_mentions_circular)
         
-        # Update circular_dep_pkg_2 to depend on circular_dep_pkg_1
-        for repo in circular_registry["repositories"]:
-            for pkg in repo["packages"]:
-                if pkg["name"] == "circular_dep_pkg_2":
-                    # Add a dependency on circular_dep_pkg_1
-                    pkg["versions"][0]["hatch_dependencies_added"].append({
-                        "name": "circular_dep_pkg_1",
-                        "version_constraint": ""
-                    })
-        
-        # Create a validator with the circular dependency registry
-        circular_validator = HatchPackageValidator(registry_data=circular_registry)
-        
-        # Validate - should detect the circular dependency
-        is_valid, results = circular_validator.validate_package(pkg1_path)
-        
-        self.assertFalse(is_valid)
-        self.assertFalse(results["valid"])
-        self.assertFalse(results["dependencies"]["valid"])
-        
-        # Check if any error message mentions circular dependency
-        any_error_mentions_circular = any("circular" in error.lower() for error in results["dependencies"]["errors"])
-        self.assertTrue(any_error_mentions_circular)
-    
     def test_entry_point_not_exists(self):
         """Test validating a package with a missing entry point file."""
         # Create a temporary package with an invalid entry point
@@ -268,6 +254,31 @@ class TestHatchPackageValidator(unittest.TestCase):
         finally:
             # Clean up
             shutil.rmtree(temp_dir)
+            
+    def test_pkg_schema_1_1_0_compliance(self):
+        """Test validating a package explicitly with schema version 1.1.0"""
+        
+        pkg_names = [
+            "arithmetic_pkg", 
+            "base_pkg_1", 
+            "base_pkg_2", 
+            "python_dep_pkg",
+            "circular_dep_pkg_1",
+            "circular_dep_pkg_2",
+            "circular_dep_pkg_2_next_v",
+            "complex_dep_pkg",
+            "simple_dep_pkg",
+            "missing_dep_pkg",
+            "version_dep_pkg"
+        ]
+
+        for pkg_name in pkg_names:
+            pkg_path = self.hatch_dev_path / pkg_name
+            #load the metadata
+            with open(pkg_path / "hatch_metadata.json", 'r') as f:
+                metadata = json.load(f)
+                is_valid, _ = self.validator.validate_pkg_metadata(metadata) 
+                self.assertTrue(is_valid, f"Package {pkg_name} failed schema validation.")
 
 
 if __name__ == "__main__":
