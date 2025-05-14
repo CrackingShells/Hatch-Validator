@@ -209,36 +209,22 @@ class TestHatchPackageValidator(unittest.TestCase):
         
     def test_circular_dependency_packages(self):
         """Test validating packages involved in a circular dependency."""
-        # First package (circular_dep_pkg_1)
-        pkg1_path = self.hatch_dev_path / "circular_dep_pkg_1"
+        #load the metadata for circular_dep_pkg_2_next_v
+        pkg_path = self.hatch_dev_path / "circular_dep_pkg_2_next_v"
+        with open(pkg_path / "hatch_metadata.json", 'r') as f:
+            metadata = json.load(f)
+
+            # Validate - should detect the circular dependency
+            is_valid, results = self.validator.validate_package(pkg_path, ("circular_dep_pkg_2", metadata))
+
+            self.assertFalse(is_valid)
+            self.assertFalse(results["valid"])
+            self.assertFalse(results["dependencies"]["valid"])
         
-        # Create a registry with a circular dependency
-        circular_registry = self.registry_data.copy()
+            # Check if any error message mentions circular dependency
+            any_error_mentions_circular = any("circular" in error.lower() for error in results["dependencies"]["errors"])
+            self.assertTrue(any_error_mentions_circular)
         
-        # Update circular_dep_pkg_2 to depend on circular_dep_pkg_1
-        for repo in circular_registry["repositories"]:
-            for pkg in repo["packages"]:
-                if pkg["name"] == "circular_dep_pkg_2":
-                    # Add a dependency on circular_dep_pkg_1
-                    pkg["versions"][0]["hatch_dependencies_added"].append({
-                        "name": "circular_dep_pkg_1",
-                        "version_constraint": ""
-                    })
-        
-        # Create a validator with the circular dependency registry
-        circular_validator = HatchPackageValidator(registry_data=circular_registry)
-        
-        # Validate - should detect the circular dependency
-        is_valid, results = circular_validator.validate_package(pkg1_path)
-        
-        self.assertFalse(is_valid)
-        self.assertFalse(results["valid"])
-        self.assertFalse(results["dependencies"]["valid"])
-        
-        # Check if any error message mentions circular dependency
-        any_error_mentions_circular = any("circular" in error.lower() for error in results["dependencies"]["errors"])
-        self.assertTrue(any_error_mentions_circular)
-    
     def test_entry_point_not_exists(self):
         """Test validating a package with a missing entry point file."""
         # Create a temporary package with an invalid entry point
