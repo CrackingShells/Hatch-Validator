@@ -27,13 +27,12 @@ class TestHatchPackageValidator(unittest.TestCase):
     def setUp(self):
         """Set up test environment before each test."""
         # Path to Hatch-Dev packages
-        self.hatch_dev_path = Path(__file__).parent.parent.parent / "Hatch-Dev"
+        self.hatch_dev_path = Path(__file__).parent.parent.parent / "Hatching-Dev"
         self.assertTrue(self.hatch_dev_path.exists(), 
                         f"Hatch-Dev directory not found at {self.hatch_dev_path}")
                         
         # Build registry data structure from Hatch-Dev packages
         self.registry_data = self._build_test_registry()
-        logger.debug(f"Built the base test registry: {json.dumps(self.registry_data, indent=2)}")
         
         # Create validator with registry data
         self.validator = HatchPackageValidator(registry_data=self.registry_data)
