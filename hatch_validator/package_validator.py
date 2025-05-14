@@ -166,7 +166,7 @@ class HatchPackageValidator:
         
         # Early check for local dependencies if they're not allowed
         if not self.allow_local_dependencies:
-            local_deps = [dep for dep in hatch_dependencies if dep.get('type') == 'local']
+            local_deps = [dep for dep in hatch_dependencies if dep.get('type').get('type') == 'local']
             if local_deps:
                 for dep in local_deps:
                     self.logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")

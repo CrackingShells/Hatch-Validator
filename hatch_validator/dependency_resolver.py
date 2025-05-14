@@ -138,7 +138,8 @@ class DependencyResolver:
                 continue
                 
             # Handle dependency based on type
-            dep_type = dep.get('type', 'remote')
+            self.logger.debug(f"Validating dependency for {dep}")
+            dep_type = dep.get('type').get('type', 'remote')
             
             if dep_type == 'local':
                 local_valid, local_dep_errors, transitive_deps = self._validate_local_dependency(dep, package_dir)
@@ -315,8 +316,9 @@ class DependencyResolver:
             dependency_graph[dep_name] = []
             
             # Handle based on dependency type
-            dep_type = dep_info.get('type', 'remote')
-            
+            self.logger.debug(f"Processing dependency '{dep_name}: {dep_info}'")
+            dep_type = dep_info.get('type',{"type": "remote"}).get('type', 'remote')
+
             if dep_type == 'local':
                 # Extract transitive dependencies from local package
                 uri = dep_info.get('uri')
