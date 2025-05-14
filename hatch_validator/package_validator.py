@@ -46,9 +46,9 @@ class HatchPackageValidator:
         except Exception as e:
             return False, [f"Validation error: {str(e)}"]
     
-    def validate_metadata_schema(self, metadata: Dict) -> Tuple[bool, List[str]]: 
+    def validate_pkg_metadata(self, metadata: Dict) -> Tuple[bool, List[str]]: 
         """
-        Validate the metadata against the JSON schema.
+        Validate the package's metadata against the package JSON schema.
         
         Args:
             metadata: The metadata to validate
@@ -273,7 +273,7 @@ class HatchPackageValidator:
         
         # Validate metadata schema
         schema_valid, schema_errors = self._run_validation(
-            self.validate_metadata_schema, metadata
+            self.validate_pkg_metadata, metadata
         )
         results['metadata_schema']['valid'] = schema_valid
         results['metadata_schema']['errors'] = schema_errors
