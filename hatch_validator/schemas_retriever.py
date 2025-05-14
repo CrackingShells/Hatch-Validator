@@ -40,12 +40,6 @@ class SchemaRetriever:
         self.cache_dir = cache_dir or CACHE_DIR
         self.cache_info_file = self.cache_dir / "schema_info.json"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Initialize console logger if not already configured
-        if not logger.handlers:
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-            logger.addHandler(console_handler)
 
     def _get_cached_schema_info(self) -> Dict[str, Any]:
         """Get information about the locally cached schema versions."""
