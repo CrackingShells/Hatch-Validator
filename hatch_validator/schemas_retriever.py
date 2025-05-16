@@ -350,10 +350,19 @@ class SchemaRetriever:
         # If the schema file doesn't exist, try to download it
         logger.info(f"Schema file not found: {schema_path}. Trying to download...")
         if self.check_and_update_schemas(force=True):
-            # Try again after updating
-            schema_path = self.cache_dir / schema_type / version / schema_filename
-            if schema_path.exists():
-                return schema_path
+            # After update, re-resolve "latest" in case it changed
+            if version == self._resolve_version(schema_type, "latest"):
+                # If we requested latest or the version that is now latest, use the new version
+                updated_version = self._resolve_version(schema_type, "latest")
+                schema_path = self.cache_dir / schema_type / updated_version / schema_filename
+                if schema_path.exists():
+                    logger.info(f"Using new latest version: {updated_version}")
+                    return schema_path
+            else:
+                # Try again with the originally requested version
+                schema_path = self.cache_dir / schema_type / version / schema_filename
+                if schema_path.exists():
+                    return schema_path
         
         # If we still don't have the schema, try to fall back to v1
         # (but only if we're not already looking for latest or v1)
