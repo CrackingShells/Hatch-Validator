@@ -321,7 +321,7 @@ class SchemaRetriever:
         self._update_cache_info(latest_info)
         
         return updated
-
+    
     def get_schema_path(self, schema_type: str, version: str = "latest") -> Optional[Path]:
         """Get the path to a schema file.
         
@@ -332,9 +332,6 @@ class SchemaRetriever:
         Returns:
             Path to the schema file, or None if not available
         """
-        # Resolve "latest" to an actual version number
-        version = self._resolve_version(schema_type, version)
-        
         # Determine schema filename based on type
         try:
             schema_filename = self._get_schema_filename(schema_type)
@@ -342,43 +339,61 @@ class SchemaRetriever:
             logger.error(e)
             return None
         
+        # First try: Get the schema at the specified or resolved latest version
+        path = self._try_get_schema_at_version(schema_type, version, schema_filename)
+        if path:
+            return path
+        
+        # Second try: Download schemas and try again with potentially updated versions
+        logger.info(f"Schema file not found. Trying to download latest schemas...")
+        if self.check_and_update_schemas(force=True):
+            # If "latest" was requested, always use whatever is latest now after download
+            if version == "latest":
+                latest_version = self._resolve_version(schema_type, "latest")
+                logger.info(f"Using freshly downloaded latest schema version: {latest_version}")
+                path = self._try_get_schema_at_version(schema_type, "latest", schema_filename)
+                if path:
+                    return path
+            else:
+                # For specific version requests, try the requested version first
+                path = self._try_get_schema_at_version(schema_type, version, schema_filename)
+                if path:
+                    return path
+                
+                # If still not found, try using the latest version as fallback
+                latest_version = self._resolve_version(schema_type, "latest")
+                if latest_version != version:
+                    logger.info(f"Version {version} not found, trying latest ({latest_version})")
+                    path = self._try_get_schema_at_version(schema_type, "latest", schema_filename)
+                    if path:
+                        return path
+        
+        logger.error(f"Could not find or download schema: {schema_type} version {version}")
+        
+        return None
+        
+    def _try_get_schema_at_version(self, schema_type: str, version: str, schema_filename: str) -> Optional[Path]:
+        """Helper method to try getting a schema at a specific version.
+        
+        Args:
+            schema_type: Either "package" or "registry"
+            version: Version of the schema, or "latest"
+            schema_filename: Filename of the schema
+            
+        Returns:
+            Path to the schema file if found, otherwise None
+        """
+        # If "latest" is requested, resolve it
+        if version == "latest":
+            version = self._resolve_version(schema_type, "latest")
+        else:
+            version = self._normalize_version(version)
+        
         # Check if the schema file exists
         schema_path = self.cache_dir / schema_type / version / schema_filename
         if schema_path.exists():
             return schema_path
-        
-        # If the schema file doesn't exist, try to download it
-        logger.info(f"Schema file not found: {schema_path}. Trying to download...")
-        if self.check_and_update_schemas(force=True):
-            # After update, re-resolve "latest" in case it changed
-            if version == self._resolve_version(schema_type, "latest"):
-                # If we requested latest or the version that is now latest, use the new version
-                updated_version = self._resolve_version(schema_type, "latest")
-                schema_path = self.cache_dir / schema_type / updated_version / schema_filename
-                if schema_path.exists():
-                    logger.info(f"Using new latest version: {updated_version}")
-                    return schema_path
-            else:
-                # Try again with the originally requested version
-                schema_path = self.cache_dir / schema_type / version / schema_filename
-                if schema_path.exists():
-                    return schema_path
-        
-        # If we still don't have the schema, try to fall back to v1
-        # (but only if we're not already looking for latest or v1)
-        if version != "v1":
-            logger.warning(f"Could not find or download schema version {version}. Falling back to v1.")
-            fallback_path = self.cache_dir / schema_type / "v1" / schema_filename
-            if fallback_path.exists():
-                return fallback_path
             
-            # Try to download v1 if it doesn't exist
-            logger.info("Trying to download v1 schema as fallback...")
-            if self.check_and_update_schemas(force=True):
-                if fallback_path.exists():
-                    return fallback_path
-        
-        logger.error(f"Could not find or download schema: {schema_type} version {version}")
         return None
 
     def load_schema(self, schema_type: str, version: str = "latest") -> Optional[Dict[str, Any]]:
