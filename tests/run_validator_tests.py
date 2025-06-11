@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""Test runner for Hatch-Validator tests.
+
+This module runs tests for schema retrieval and package validation functionality.
+"""
 import sys
 import unittest
 import logging
@@ -6,7 +10,7 @@ from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
@@ -16,13 +20,25 @@ logging.basicConfig(
 logger = logging.getLogger("hatch.validator_test_runner")
 
 if __name__ == "__main__":
-    # Discover and run all tests
+    # Add parent directory to path for imports
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    
+    # Discover and run tests
     test_loader = unittest.TestLoader()
-    
+    if len(sys.argv) > 1 and sys.argv[1] == "--schemas-only":
+        # Run only schema retriever integration tests (network tests)
+        logger.info("Running schema retriever integration tests only...")
+        test_suite = test_loader.loadTestsFromName("test_schemas_retriever.TestSchemaRetrieverIntegration")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--validator-only":
+        # Run only package validator tests
+        logger.info("Running package validator tests only...")
+        test_suite = test_loader.loadTestsFromName("test_package_validator.TestHatchPackageValidator")
+    else:
+        # Run all tests
+        logger.info("Running all Hatch-Validator tests...")
+        test_suite = test_loader.discover('.', pattern='test_*.py')
+
     # Run the tests
-    test_suite = test_loader.discover('tests', pattern='test_*.py')
-    
-    logger.info("Running Hatch-Validator tests...")
     test_runner = unittest.TextTestRunner(verbosity=2)
     result = test_runner.run(test_suite)
     
