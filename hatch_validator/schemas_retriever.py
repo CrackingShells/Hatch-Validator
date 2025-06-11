@@ -1,22 +1,19 @@
 #!/usr/bin/env python
-"""
-Schema Retriever Module
+"""Schema retrieval and caching utility for Hatch schemas.
 
-This module handles:
-1. Fetching the latest schema information from the official source
-2. Downloading and caching schema files locally
-3. Providing access to schema files for validation
+This module provides utilities for:
+1. Discovering latest schema versions via GitHub API
+2. Downloading schemas directly from GitHub releases
+3. Caching schemas locally for offline use
+4. Validating schema updates and version management
 """
 
 import os
 import json
-import shutil
 import logging
 import requests
-import tempfile
-import zipfile
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 
 # Configure logging
@@ -24,7 +21,8 @@ logger = logging.getLogger("hatch.schema_retriever")
 logger.setLevel(logging.INFO)
 
 # Configuration
-SCHEMA_INFO_URL = "https://crackingshells.github.io/Hatch-Schemas/latest.json"
+GITHUB_API_BASE = "https://api.github.com/repos/crackingshells/Hatch-Schemas"
+GITHUB_RELEASES_BASE = "https://github.com/crackingshells/Hatch-Schemas/releases/download"
 CACHE_DIR = Path.home() / ".hatch" / "schemas"
 CACHE_INFO_FILE = CACHE_DIR / "schema_info.json"
 DEFAULT_CACHE_DURATION = 86400  # 24 hours in seconds
@@ -66,128 +64,85 @@ class SchemaRetriever:
         except IOError as e:
             logger.error(f"Error writing cache info: {e}")
             return False
-
+    
     def _get_latest_schema_info(self) -> Dict[str, Any]:
         """Fetch information about the latest schema versions from the server."""
         try:
-            logger.debug(f"Requesting schema info from {SCHEMA_INFO_URL}")
-            response = requests.get(SCHEMA_INFO_URL, timeout=10)
+            logger.debug(f"Requesting releases from {GITHUB_API_BASE}/releases")
+            response = requests.get(f"{GITHUB_API_BASE}/releases", timeout=10)
             response.raise_for_status()
-            schema_info = response.json()
-            logger.debug("Schema info retrieved successfully")
+            releases = response.json()
             
-            # Add a timestamp for cache freshness tracking
-            schema_info["updated_at"] = datetime.now().astimezone().isoformat()
-            return schema_info
+            # Extract latest versions for each schema type
+            latest_schemas = {
+                "updated_at": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            for release in releases:
+                tag = release['tag_name']
+                if tag.startswith('schemas-package-'):
+                    if 'latest_package_version' not in latest_schemas:
+                        version = tag.replace('schemas-package-', '')
+                        latest_schemas['latest_package_version'] = version
+                        latest_schemas['package'] = {
+                            'version': version,
+                            'url': f"{GITHUB_RELEASES_BASE}/schemas-package-{version}/hatch_pkg_metadata_schema.json",
+                            'release_url': release['html_url']
+                        }
+                elif tag.startswith('schemas-registry-'):
+                    if 'latest_registry_version' not in latest_schemas:
+                        version = tag.replace('schemas-registry-', '')
+                        latest_schemas['latest_registry_version'] = version
+                        latest_schemas['registry'] = {
+                            'version': version,
+                            'url': f"{GITHUB_RELEASES_BASE}/schemas-registry-{version}/hatch_all_pkg_metadata_schema.json",
+                            'release_url': release['html_url']
+                        }
+            
+            logger.debug("Schema info retrieved successfully")
+            return latest_schemas
         except requests.RequestException as e:
             logger.error(f"Error fetching schema info: {e}")
             return {}
-
-    def _download_and_extract_schema(self, schema_type: str, version: str, download_url: str) -> bool:
-        """Download and extract schema files to the cache directory for a specific schema type.
+    
+    def _download_schema_file(self, schema_type: str, schema_url: str) -> bool:
+        """Download a schema file directly from the raw URL.
         
         Args:
-            schema_type: Either "package" or "registry"
-            version: The version of the schema (e.g., "v1")
-            download_url: URL to download the schema ZIP archive
+            schema_type: Either "package" or "registry".
+            schema_url: Direct URL to the schema JSON file.
             
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if download was successful, False otherwise.
         """
         try:
-            # Create a temporary file to download to
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_file:
-                temp_path = temp_file.name
+            # Create schema type directory
+            schema_cache_dir = self.cache_dir / schema_type
+            schema_cache_dir.mkdir(parents=True, exist_ok=True)
             
-            # Download the schema zip
-            logger.info(f"Downloading {schema_type} schema version {version} from {download_url}")
-            response = requests.get(download_url, stream=True, timeout=30)
+            # Determine filename based on schema type
+            if schema_type == "package":
+                filename = "hatch_pkg_metadata_schema.json"
+            elif schema_type == "registry":
+                filename = "hatch_all_pkg_metadata_schema.json"
+            else:
+                logger.error(f"Unknown schema type: {schema_type}")
+                return False
+            
+            # Download the schema file
+            logger.info(f"Downloading {schema_type} schema from {schema_url}")
+            response = requests.get(schema_url, timeout=30)
             response.raise_for_status()
             
-            # Save to temporary file
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            # Save to cache
+            schema_path = schema_cache_dir / filename
+            with open(schema_path, "w") as f:
+                json.dump(response.json(), f, indent=2)
             
-            # Create the schema version directory
-            schema_version_dir = self.cache_dir / schema_type / version
-            schema_version_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Determine the expected schema filename based on schema type
-            expected_filename = self._get_schema_filename(schema_type)
-            found_schema = False
-            
-            # Extract the zip file to the schema version directory
-            with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-                logger.debug(f"Extracting {schema_type} schema to {schema_version_dir}")
-                file_list = zip_ref.namelist()
-                logger.debug(f"Files in ZIP: {file_list}")
-                
-                # Search strategy:
-                # 1. First look in version directories (e.g., v1/schema.json)
-                # 2. Then look at the top level for the expected filename
-                # 3. Then look for any JSON file that contains the schema type name
-                # 4. Finally just extract all JSON files
-                
-                # Search patterns in order of preference
-                search_patterns = [
-                    # Pattern 1: vX/expected_filename.json
-                    lambda f: f.startswith('v') and f.endswith(f'/{expected_filename}'),
-                    # Pattern 2: expected_filename.json at root
-                    lambda f: f == expected_filename,
-                    # Pattern 3: Any JSON with schema type in the name
-                    lambda f: f.endswith('.json') and schema_type in f.lower(),
-                    # Pattern 4: Any JSON file
-                    lambda f: f.endswith('.json')
-                ]
-                
-                for pattern in search_patterns:
-                    matches = [f for f in file_list if pattern(f)]
-                    if matches:
-                        match = matches[0]  # Take the first match
-                        logger.info(f"Found schema file: {match}")
-                        schema_data = zip_ref.read(match)
-                        with open(schema_version_dir / expected_filename, 'wb') as f:
-                            f.write(schema_data)
-                        found_schema = True
-                        break
-                
-                # If we're using the "any JSON" pattern (last resort), log a warning
-                if found_schema and pattern == search_patterns[-1]:
-                    logger.warning(f"Used generic JSON file as {schema_type} schema: {match}")
-            
-            # Create or update a "latest" marker file
-            latest_file = self.cache_dir / schema_type / "latest"
-            with open(latest_file, 'w') as f:
-                f.write(version)
-            
-            # Clean up the temporary file
-            os.unlink(temp_path)
-            
-            # If we couldn't find the schema in the ZIP, check if it exists in the local repository
-            if not found_schema:
-                # Try to find the schema in the local Hatch-Schemas repository
-                local_paths = [
-                    Path(__file__).parent.parent / "Hatch-Schemas" / schema_type / version / expected_filename,
-                    Path(__file__).parent.parent / "Hatch-Schemas" / schema_type / "v1" / expected_filename
-                ]
-                
-                for local_schema in local_paths:
-                    if local_schema.exists():
-                        logger.info(f"Found schema at {local_schema}. Copying to {schema_version_dir / expected_filename}")
-                        shutil.copy(local_schema, schema_version_dir / expected_filename)
-                        found_schema = True
-                        break
-            
-            if found_schema:
-                logger.debug(f"{schema_type.capitalize()} schema extraction completed successfully")
-                return True
-            else:
-                logger.error(f"Could not find {expected_filename} in the downloaded archive or in local repository")
-                return False
-                
+            logger.debug(f"{schema_type.capitalize()} schema saved to {schema_path}")
+            return True
         except Exception as e:
-            logger.error(f"Error downloading {schema_type} schema: {e}", exc_info=True)
+            logger.error(f"Error downloading {schema_type} schema: {e}")
             return False
 
     def check_and_update_schemas(self, force: bool = False) -> bool:
@@ -206,44 +161,34 @@ class SchemaRetriever:
         need_to_fetch = force
         
         if not force and cached_info:
-            # Check cache freshness
-            last_updated = cached_info.get("updated_at")
-            if last_updated:
-                try:
-                    last_updated_dt = datetime.fromisoformat(last_updated.replace("Z", "+00:00"))
-                    cache_age = datetime.now().astimezone() - last_updated_dt
+            try:
+                cached_updated = datetime.fromisoformat(cached_info.get("updated_at", "1970-01-01T00:00:00+00:00").replace("Z", "+00:00"))
+                if cached_updated.tzinfo is None:
+                    cached_updated = cached_updated.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                cache_age = (now - cached_updated).total_seconds()
+                
+                if cache_age < DEFAULT_CACHE_DURATION:
+                    logger.debug(f"Cache is fresh (age: {cache_age:.0f}s < {DEFAULT_CACHE_DURATION}s)")
                     
-                    # Cache is stale
-                    if cache_age >= timedelta(seconds=DEFAULT_CACHE_DURATION):
-                        need_to_fetch = True
-                        logger.info("Schema cache is stale. Checking for updates.")
-                    else:
-                        logger.info(f"Using cached schema info (last updated: {last_updated})")
-                        
-                        # Verify schema files exist as a secondary check
-                        for schema_type in ["package", "registry"]:
-                            if schema_type not in cached_info:
-                                continue
-                                
-                            # Get version from cache info
-                            version = (cached_info.get(schema_type, {}).get("version") or 
-                                      cached_info.get(f"latest_{schema_type}_version", "v1"))
-                            
-                            version = self._normalize_version(version)
-                            
-                            # Determine schema filename
+                    # Verify that the schema files exist for each cached schema type
+                    for schema_type in ["package", "registry"]:
+                        if schema_type in cached_info:
                             schema_filename = self._get_schema_filename(schema_type)
-                            schema_path = self.cache_dir / schema_type / version / schema_filename
+                            schema_path = self.cache_dir / schema_type / schema_filename
                             
                             if not schema_path.exists():
                                 logger.warning(f"Schema file {schema_path} referenced in cache doesn't exist.")
                                 need_to_fetch = True
                                 break
-                except ValueError:
-                    logger.warning("Invalid timestamp in cached schema info")
+                else:
+                    logger.debug(f"Cache is stale (age: {cache_age:.0f}s >= {DEFAULT_CACHE_DURATION}s)")
                     need_to_fetch = True
-            else:
+            except ValueError:
+                logger.warning("Invalid timestamp in cached schema info")
                 need_to_fetch = True
+        else:
+            need_to_fetch = True
         
         # If we don't need to fetch, return early - everything is up-to-date
         if not need_to_fetch:
@@ -255,73 +200,61 @@ class SchemaRetriever:
             logger.warning("Could not retrieve latest schema information. Using cached version if available.")
             return False
         
-        # Set a timestamp in the latest info for caching purposes
-        latest_info["updated_at"] = datetime.now().astimezone().isoformat()
-        
         updated = False
         
         # Process each schema type
         for schema_type in ["package", "registry"]:
+            # Skip if this schema type is not in the latest info
             if schema_type not in latest_info:
+                logger.debug(f"No {schema_type} schema information in the latest info")
                 continue
                 
-            # Get latest version info
             latest_version_key = f"latest_{schema_type}_version"
             latest_version = latest_info.get(latest_version_key)
             
+            # Skip if no latest version is defined
             if not latest_version:
+                logger.debug(f"No latest version for {schema_type} schema")
                 continue
             
-            # Ensure version has 'v' prefix
-            latest_version = self._normalize_version(latest_version)
-            latest_info[latest_version_key] = latest_version
-            
-            # Determine if we need to update this schema
             needs_update = True
             
-            # Skip update if:
-            # 1. Not forcing update
-            # 2. We have cached info
-            # 3. The cached version matches the latest version
-            # 4. The schema file actually exists
-            if not force and cached_info and schema_type in cached_info:
-                cached_version = (cached_info.get(schema_type, {}).get("version") or 
-                                 cached_info.get(f"latest_{schema_type}_version"))
-                
-                cached_version = self._normalize_version(cached_version)
+            # Check if we have this version cached already
+            if cached_info and schema_type in cached_info:
+                cached_version_key = f"latest_{schema_type}_version"
+                cached_version = cached_info.get(cached_version_key)
                 
                 if cached_version == latest_version:
-                    # Check if file exists
-                    schema_filename = self._get_schema_filename(schema_type)
-                    schema_path = self.cache_dir / schema_type / latest_version / schema_filename
+                    # Check if the cached version is up to date
+                    cached_updated = datetime.fromisoformat(cached_info.get("updated_at", "1970-01-01T00:00:00+00:00").replace("Z", "+00:00"))
+                    if cached_updated.tzinfo is None:
+                        cached_updated = cached_updated.replace(tzinfo=timezone.utc)
+                    latest_updated = datetime.fromisoformat(latest_info.get("updated_at", "1970-01-01T00:00:00+00:00").replace("Z", "+00:00"))
+                    if latest_updated.tzinfo is None:
+                        latest_updated = latest_updated.replace(tzinfo=timezone.utc)
                     
-                    if schema_path.exists():
+                    if cached_updated >= latest_updated:
                         logger.info(f"{schema_type.capitalize()} schema is up to date (version {latest_version}).")
                         needs_update = False
             
             # Update schema if needed
             if needs_update:
-                download_url = latest_info.get(schema_type, {}).get("download_url")
-                if download_url:
+                schema_url = latest_info.get(schema_type, {}).get("url")
+                if schema_url:
                     logger.info(f"New {schema_type} schema version available: {latest_version}")
-                    if self._download_and_extract_schema(schema_type, latest_version, download_url):
+                    if self._download_schema_file(schema_type, schema_url):
                         updated = True
                         logger.info(f"{schema_type.capitalize()} schema updated successfully.")
-                        
-                        # Update schema info in the latest_info
-                        if schema_type not in latest_info:
-                            latest_info[schema_type] = {}
-                        latest_info[schema_type]["version"] = latest_version
                     else:
                         logger.error(f"{schema_type.capitalize()} schema update failed.")
                 else:
                     logger.warning(f"No download URL found for {schema_type} schema")
         
-        # Always update cache info after checking, even if nothing changed
-        self._update_cache_info(latest_info)
+        # Update cache info after all schemas are updated
+        if updated:
+            self._update_cache_info(latest_info)
         
         return updated
-    
     def get_schema_path(self, schema_type: str, version: str = "latest") -> Optional[Path]:
         """Get the path to a schema file.
         
@@ -339,61 +272,48 @@ class SchemaRetriever:
             logger.error(e)
             return None
         
-        # First try: Get the schema at the specified or resolved latest version
-        path = self._try_get_schema_at_version(schema_type, version, schema_filename)
-        if path:
-            return path
-        
-        # Second try: Download schemas and try again with potentially updated versions
-        logger.info(f"Schema file not found. Trying to download latest schemas...")
-        if self.check_and_update_schemas(force=True):
-            # If "latest" was requested, always use whatever is latest now after download
-            if version == "latest":
-                latest_version = self._resolve_version(schema_type, "latest")
-                logger.info(f"Using freshly downloaded latest schema version: {latest_version}")
-                path = self._try_get_schema_at_version(schema_type, "latest", schema_filename)
-                if path:
-                    return path
-            else:
-                # For specific version requests, try the requested version first
-                path = self._try_get_schema_at_version(schema_type, version, schema_filename)
-                if path:
-                    return path
-                
-                # If still not found, try using the latest version as fallback
-                latest_version = self._resolve_version(schema_type, "latest")
-                if latest_version != version:
-                    logger.info(f"Version {version} not found, trying latest ({latest_version})")
-                    path = self._try_get_schema_at_version(schema_type, "latest", schema_filename)
-                    if path:
-                        return path
-        
-        logger.error(f"Could not find or download schema: {schema_type} version {version}")
-        
-        return None
-        
-    def _try_get_schema_at_version(self, schema_type: str, version: str, schema_filename: str) -> Optional[Path]:
-        """Helper method to try getting a schema at a specific version.
-        
-        Args:
-            schema_type: Either "package" or "registry"
-            version: Version of the schema, or "latest"
-            schema_filename: Filename of the schema
-            
-        Returns:
-            Path to the schema file if found, otherwise None
-        """
-        # If "latest" is requested, resolve it
-        if version == "latest":
-            version = self._resolve_version(schema_type, "latest")
-        else:
-            version = self._normalize_version(version)
-        
-        # Check if the schema file exists
-        schema_path = self.cache_dir / schema_type / version / schema_filename
+        # Check if the schema file exists in cache
+        schema_path = self.cache_dir / schema_type / schema_filename
         if schema_path.exists():
             return schema_path
+        
+        # If not found, try to download latest schemas
+        logger.info(f"Schema file not found. Trying to download latest schemas...")
+        if self.check_and_update_schemas(force=True):
+            # Check again after download
+            if schema_path.exists():
+                return schema_path
+        
+        # If specific version requested and we don't have it, try to download directly
+        if version != "latest":
+            # Ensure version has 'v' prefix
+            if not version.startswith('v'):
+                version = f"v{version}"
             
+            # Determine schema filename and release tag
+            if schema_type == "package":
+                filename = "hatch_pkg_metadata_schema.json"
+                release_tag = f"schemas-package-{version}"
+            else:
+                filename = "hatch_all_pkg_metadata_schema.json"
+                release_tag = f"schemas-registry-{version}"
+            
+            # Try to download specific version from release
+            schema_url = f"{GITHUB_RELEASES_BASE}/{release_tag}/{filename}"
+            try:
+                logger.debug(f"Trying to download {schema_type} schema version {version} from {schema_url}")
+                response = requests.get(schema_url, timeout=10)
+                response.raise_for_status()
+                
+                # Save to cache
+                schema_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(schema_path, "w") as f:
+                    json.dump(response.json(), f, indent=2)
+                return schema_path
+            except requests.RequestException as e:
+                logger.error(f"Error downloading {schema_type} schema version {version}: {e}")
+            
+        logger.error(f"Could not find or download schema: {schema_type} version {version}")
         return None
 
     def load_schema(self, schema_type: str, version: str = "latest") -> Optional[Dict[str, Any]]:
@@ -446,7 +366,7 @@ class SchemaRetriever:
         if version and not version.startswith('v'):
             return f"v{version}"
         return version
-
+    
     def _resolve_version(self, schema_type: str, version: str = "latest") -> str:
         """Resolve version string to an actual version number.
         
@@ -460,21 +380,12 @@ class SchemaRetriever:
         if version != "latest":
             return self._normalize_version(version)
             
-        # Try to get the version from the marker file first
-        latest_file = self.cache_dir / schema_type / "latest"
-        if latest_file.exists():
-            try:
-                with open(latest_file, 'r') as f:
-                    return self._normalize_version(f.read().strip())
-            except IOError:
-                pass
-        
-        # If no marker file or error reading it, fall back to cache info
+        # Get the latest version from cache info
         cached_info = self._get_cached_schema_info()
         version = cached_info.get(f"latest_{schema_type}_version")
         
-        # Default to v1 if not found
-        return self._normalize_version(version) if version else "v1"
+        # Default to v1.2.0 if not found (current latest version)
+        return self._normalize_version(version) if version else "v1.2.0"
 
 
 # Create a default instance for easier imports
