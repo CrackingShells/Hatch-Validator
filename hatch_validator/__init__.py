@@ -8,8 +8,11 @@ __version__ = "0.3.2"
 
 from .package_validator import HatchPackageValidator, PackageValidationError
 from .dependency_resolver import DependencyResolver, DependencyResolutionError
+from .schema_fetcher import SchemaFetcher
+from .schema_cache import SchemaCache
+
 from .schemas_retriever import (
-    SchemaRetriever, 
+    SchemaRetriever,
     get_package_schema, 
     get_registry_schema
 )
@@ -20,6 +23,8 @@ __all__ = [
     'DependencyResolver', 
     'DependencyResolutionError',
     'SchemaRetriever',
+    'SchemaFetcher',
+    'SchemaCache',
     'get_package_schema',
     'get_registry_schema',
 ]
