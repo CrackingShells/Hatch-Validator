@@ -37,6 +37,10 @@ if __name__ == "__main__":
         # Run only schema validator framework tests
         logger.info("Running schema validator framework tests only...")
         test_suite = test_loader.loadTestsFromName("test_schema_validators")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--v1-1-0-only":
+        # Run only v1.1.0 validator implementation tests
+        logger.info("Running v1.1.0 validator implementation tests only...")
+        test_suite = test_loader.loadTestsFromName("test_schema_validators_v1_1_0")
     else:
         # Run all tests
         logger.info("Running all Hatch-Validator tests...")

@@ -207,13 +207,13 @@ class TestValidationStrategies(unittest.TestCase):
 class TestValidatorFactory(unittest.TestCase):
     """Test cases for ValidatorFactory class."""
     
-    def test_factory_not_implemented(self):
-        """Test that factory raises NotImplementedError in Phase 1."""
-        with self.assertRaises(NotImplementedError):
-            ValidatorFactory.create_validator_chain()
+    def test_factory_implementation(self):
+        """Test that factory now works after Phase 2 implementation."""
+        validator = ValidatorFactory.create_validator_chain()
+        self.assertIsNotNone(validator)
         
-        with self.assertRaises(NotImplementedError):
-            ValidatorFactory.create_validator_chain("1.1.0")
+        validator_v1_1_0 = ValidatorFactory.create_validator_chain("1.1.0")
+        self.assertIsNotNone(validator_v1_1_0)
 
 
 if __name__ == "__main__":

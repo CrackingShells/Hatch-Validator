@@ -233,6 +233,17 @@ class ValidatorFactory:
         Raises:
             ValueError: If the target version is not supported
         """
-        # For Phase 1, we'll return a placeholder
-        # In Phase 2, this will be populated with actual validator implementations
-        raise NotImplementedError("Validator factory will be implemented in Phase 2")
+        # Import here to avoid circular imports
+        from .schema_validators_v1_1_0 import SchemaV1_1_0Validator
+        
+        # Create validators (newest to oldest when we have more versions)
+        v1_1_0_validator = SchemaV1_1_0Validator()
+        
+        # If specific version requested, return that validator
+        if target_version == "1.1.0":
+            return v1_1_0_validator
+        elif target_version is None:
+            # Default to v1.1.0 for now (will be latest when we add more versions)
+            return v1_1_0_validator
+        else:
+            raise ValueError(f"Unsupported schema version: {target_version}")
