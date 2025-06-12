@@ -27,6 +27,7 @@ from .dependency_resolver import DependencyResolver
 
 # Configure logging
 logger = logging.getLogger("hatch.schema_validators_v1_1_0")
+logger.setLevel(logging.INFO)
 
 
 class SchemaValidationV1_1_0(SchemaValidationStrategy):
@@ -118,9 +119,13 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
                 is_valid = False
                 return is_valid, errors
         
+        # Get pending update information for circular dependency detection
+        pending_update = context.get_data("pending_update")
+        
         # Use the dependency resolver for validation
         if hatch_dependencies:
             resolver = self._get_dependency_resolver(context)
+            # Validate dependencies
             validation_valid, validation_errors = resolver.validate_dependencies(
                 hatch_dependencies,
                 context.package_dir
@@ -128,6 +133,21 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
             
             if not validation_valid:
                 errors.extend(validation_errors)
+                is_valid = False
+                
+            # Detect circular dependencies
+            has_cycles, cycles = resolver.detect_dependency_cycles(
+                hatch_dependencies,
+                context.package_dir,
+                pending_update
+            )
+            
+            if has_cycles:
+                for cycle in cycles:
+                    cycle_str = " -> ".join(cycle)
+                    error_msg = f"Circular dependency detected: {cycle_str}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
                 is_valid = False
         
         # Validate Python dependencies format

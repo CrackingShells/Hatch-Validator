@@ -22,10 +22,19 @@ logger = logging.getLogger("hatch.validator_test_runner")
 if __name__ == "__main__":
     # Add parent directory to path for imports
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    
-    # Discover and run tests
+      # Discover and run tests
     test_loader = unittest.TestLoader()
-    if len(sys.argv) > 1 and sys.argv[1] == "--schemas-only":
+    if len(sys.argv) > 1 and sys.argv[1] == "--help":
+        print("Usage: python run_validator_tests.py [option]")
+        print("Options:")
+        print("  --schemas-only           Run only schema retriever tests")
+        print("  --validator-only         Run only package validator tests")
+        print("  --schema-validators-only Run only schema validator framework tests")
+        print("  --v1-1-0-only           Run only v1.1.0 validator implementation tests")
+        print("  --all                    Run all tests explicitly")
+        print("  (no option)              Run all tests using discovery")
+        sys.exit(0)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--schemas-only":
         # Run only schema retriever integration tests (network tests)
         logger.info("Running schema retriever integration tests only...")
         test_suite = test_loader.loadTestsFromName("test_schemas_retriever.TestSchemaRetrieverIntegration")
@@ -41,10 +50,28 @@ if __name__ == "__main__":
         # Run only v1.1.0 validator implementation tests
         logger.info("Running v1.1.0 validator implementation tests only...")
         test_suite = test_loader.loadTestsFromName("test_schema_validators_v1_1_0")
-    else:
-        # Run all tests
+    elif len(sys.argv) > 1 and sys.argv[1] == "--all":
+        # Run all tests explicitly
         logger.info("Running all Hatch-Validator tests...")
-        test_suite = test_loader.discover('.', pattern='test_*.py')
+        test_modules = [
+            "test_schemas_retriever",
+            "test_package_validator", 
+            "test_schema_validators",
+            "test_schema_validators_v1_1_0"
+        ]
+        test_suite = unittest.TestSuite()
+        for module_name in test_modules:
+            try:
+                module_tests = test_loader.loadTestsFromName(module_name)
+                test_suite.addTest(module_tests)
+                logger.info(f"Added tests from {module_name}")
+            except Exception as e:
+                logger.warning(f"Could not load tests from {module_name}: {e}")
+    else:
+        # Run all tests using discovery as fallback
+        logger.info("Running all Hatch-Validator tests using discovery...")
+        current_dir = Path(__file__).parent
+        test_suite = test_loader.discover(str(current_dir), pattern='test_*.py')
 
     # Run the tests
     test_runner = unittest.TextTestRunner(verbosity=2)
