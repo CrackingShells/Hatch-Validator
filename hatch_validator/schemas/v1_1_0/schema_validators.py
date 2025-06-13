@@ -23,6 +23,7 @@ from hatch_validator.core.validation_strategy import (
 )
 from hatch_validator.schemas.schemas_retriever import get_package_schema
 from .dependency_resolver import DependencyResolver, DependencyResolutionError
+from .dependency_validation_strategy import DependencyValidationV1_1_0
 
 
 # Configure logging
@@ -277,7 +278,6 @@ class SchemaValidator(SchemaValidator):
     This validator handles validation for packages using schema version 1.1.0,
     which includes hatch_dependencies and python_dependencies as separate arrays.
     """
-    
     def __init__(self, next_validator=None):
         """Initialize the v1.1.0 validator with strategies.
         
@@ -286,7 +286,7 @@ class SchemaValidator(SchemaValidator):
         """
         super().__init__(next_validator)
         self.schema_strategy = SchemaValidation()
-        self.dependency_strategy = DependencyValidation()
+        self.dependency_strategy = DependencyValidationV1_1_0()
         self.entry_point_strategy = EntryPointValidation()
         self.tools_strategy = ToolsValidation()
         
