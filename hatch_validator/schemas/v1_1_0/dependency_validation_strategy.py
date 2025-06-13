@@ -216,7 +216,7 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
             if not local_valid:
                 errors.extend(local_errors)
                 is_valid = False
-        elif type_name == 'registry' or type_name is None:  # Default to registry
+        elif type_name == 'remote' or type_name is None:  # Default to registry
             registry_valid, registry_errors = self._validate_registry_dependency(dep, context)
             if not registry_valid:
                 errors.extend(registry_errors)

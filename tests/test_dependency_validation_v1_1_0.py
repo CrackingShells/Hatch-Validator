@@ -95,12 +95,12 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
                 {
                     "name": "package_a",
                     "version_constraint": ">=1.0.0",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 },
                 {
                     "name": "package_b",
                     "version_constraint": "~=1.5",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }
             ],
             "python_dependencies": [
@@ -124,7 +124,7 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
                 {
                     "name": "non_existent_package",
                     "version_constraint": ">=1.0.0",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }
             ]
         }
@@ -144,7 +144,7 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
                 {
                     "name": "package_a",
                     "version_constraint": "invalid_constraint",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }
             ],
             "python_dependencies": [
@@ -263,7 +263,7 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
             "hatch_dependencies": [
                 {
                     "version_constraint": ">=1.0.0",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }  # Missing name
             ],
             "python_dependencies": [
@@ -353,7 +353,7 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
                 {
                     "name": "package_a",
                     "version_constraint": ">=1.0.0",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }
             ]
         }
@@ -421,7 +421,7 @@ class TestDependencyValidationIntegration(unittest.TestCase):
                 {
                     "name": "test_package",
                     "version_constraint": ">=1.0.0",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }
             ],
             "python_dependencies": [
@@ -455,7 +455,7 @@ class TestDependencyValidationIntegration(unittest.TestCase):
                 {
                     "name": "test_package",
                     "version_constraint": "invalid>>constraint",
-                    "type": {"type": "registry"}
+                    "type": {"type": "remote"}
                 }
             ]
         }
