@@ -849,6 +849,102 @@ class CachedRegistryClient(RegistryClient):
         self._invalidate_cache()
 
 
+class DirectRegistryClient(RegistryClient):
+    """Registry client that uses registry data provided directly.
+    
+    Implements the RegistryClient interface for registries where the data
+    is already available in memory, useful for testing or when data is
+    loaded from alternative sources. Uses chain of responsibility pattern
+    to handle different registry schema versions.
+    """
+    
+    def __init__(self, registry_data: Dict[str, Any]):
+        """Initialize the direct registry client.
+        
+        Args:
+            registry_data (Dict[str, Any]): The registry data dictionary.
+        """
+        self.registry_data = registry_data
+        self._loaded = True
+        self._accessor_chain = RegistryAccessorChain()
+        self._accessor = self._accessor_chain.get_accessor(registry_data)
+        
+        if self._accessor is None:
+            raise RegistryError(f"Unsupported registry schema. Supported versions: {self._accessor_chain.get_supported_versions()}")
+    
+    def load_registry_data(self) -> bool:
+        """Load registry data (no-op since data is already loaded).
+        
+        Returns:
+            bool: Always returns True since data is already available.
+        """
+        return True
+    
+    def get_package_info(self, package_name: str) -> Optional[RegistryPackageInfo]:
+        """Get information about a package from the registry.
+        
+        Args:
+            package_name (str): Name of the package to look up.
+            
+        Returns:
+            Optional[RegistryPackageInfo]: Package information, or None if not found.
+        """
+        if not self._accessor.package_exists(self.registry_data, package_name):
+            return None
+        
+        versions = self._accessor.get_package_versions(self.registry_data, package_name)
+        metadata = self._accessor.get_package_metadata(self.registry_data, package_name)
+        
+        return RegistryPackageInfo(
+            name=package_name,
+            versions=versions,
+            metadata=metadata
+        )
+    
+    def package_exists(self, package_name: str) -> bool:
+        """Check if a package exists in the registry.
+        
+        Args:
+            package_name (str): Name of the package to check.
+            
+        Returns:
+            bool: True if package exists.
+        """
+        return self._accessor.package_exists(self.registry_data, package_name)
+    
+    def get_all_packages(self) -> List[str]:
+        """Get list of all package names in the registry.
+        
+        Returns:
+            List[str]: List of all package names.
+        """
+        return self._accessor.get_all_package_names(self.registry_data)
+    
+    def is_loaded(self) -> bool:
+        """Check if registry data is loaded.
+        
+        Returns:
+            bool: Always returns True since data is provided directly.
+        """
+        return self._loaded
+    
+    def get_raw_registry_data(self) -> Dict[str, Any]:
+        """Get the raw registry data.
+        
+        Returns:
+            Dict[str, Any]: Raw registry data dictionary.
+        """
+        return self.registry_data
+    
+    def get_schema_version(self) -> str:
+        """Get the detected schema version.
+        
+        Returns:
+            str: Schema version string.
+        """
+        return self._accessor.get_schema_version(self.registry_data)
+
+
 class RegistryManager:
     """Manager for registry clients and registry-related operations.
     
