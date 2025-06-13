@@ -7,6 +7,7 @@ of specific schema versions.
 
 import json
 import os
+import threading
 from typing import Dict, List, Set, Tuple, Optional, Any
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -1137,3 +1138,35 @@ class RegistryManager:
                 'total_versions': 0,
                 'average_versions_per_package': 0
             }
+    
+    def get_registry_data(self) -> Optional[Dict[str, Any]]:
+        """Get the raw registry data.
+        
+        Returns:
+            Optional[Dict[str, Any]]: Registry data if available, None otherwise.
+        """
+        try:
+            if not self.registry_client.is_loaded():
+                self.registry_client.load_registry_data()
+            
+            if hasattr(self.registry_client, 'get_raw_registry_data'):
+                return self.registry_client.get_raw_registry_data()
+            else:
+                return None
+        except Exception:
+            return None
+    
+    def get_accessor(self, registry_data: Dict[str, Any]) -> Optional['RegistryAccessor']:
+        """Get the appropriate registry accessor for the given registry data.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            
+        Returns:
+            Optional[RegistryAccessor]: Appropriate accessor, or None if unsupported.
+        """
+        try:
+            accessor_chain = RegistryAccessorChain()
+            return accessor_chain.get_accessor(registry_data)
+        except Exception:
+            return None

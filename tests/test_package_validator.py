@@ -12,6 +12,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hatch_validator.package_validator import HatchPackageValidator, PackageValidationError
+from hatch_validator.utils.registry_client import DirectRegistryClient, RegistryManager
 
 # Configure logging
 logging.basicConfig(
@@ -33,7 +34,10 @@ class TestHatchPackageValidator(unittest.TestCase):
                         
         # Build registry data structure from Hatch-Dev packages
         self.registry_data = self._build_test_registry()
-        
+
+        drc = DirectRegistryClient(registry_data=self.registry_data)
+        RegistryManager(drc)
+
         # Create validator with registry data
         self.validator = HatchPackageValidator(registry_data=self.registry_data)
         
@@ -191,12 +195,18 @@ class TestHatchPackageValidator(unittest.TestCase):
                     pkg["latest_version"] = "0.0.9"
                     pkg["versions"][0]["version"] = "0.0.9"
         
+        modified_registry_client = DirectRegistryClient(registry_data=modified_registry)
+        RegistryManager.set_registry_client(modified_registry_client)
+
         # Create a new validator with the modified registry
         validator = HatchPackageValidator(registry_data=modified_registry)
-        
+
         # Validate the package with version-specific dependency
         pkg_path = self.hatch_dev_path / "version_dep_pkg"
         is_valid, results = validator.validate_package(pkg_path)
+        
+        # Set the registry client back to the original for other tests
+        RegistryManager.set_registry_client(DirectRegistryClient(registry_data=self.registry_data))
         
         self.assertFalse(is_valid, f"Package validation should fail with incompatible version")
         self.assertFalse(results["valid"], f"Overall validation result should be invalid for incompatible version")

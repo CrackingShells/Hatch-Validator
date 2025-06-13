@@ -29,59 +29,7 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
     def __init__(self):
         """Initialize the dependency validation strategy."""
         self.version_validator = VersionConstraintValidator()
-        self.registry_manager = None
-    
-    def _get_registry_manager(self, context: ValidationContext) -> Optional[RegistryManager]:
-        """Get or create registry manager instance.
-        
-        Args:
-            context (ValidationContext): Validation context with registry data
-            
-        Returns:
-            Optional[RegistryManager]: Configured registry manager instance, or None if no registry
-        """
-        if self.registry_manager is None and context.registry_data:
-            # Create a mock registry client with the context data
-            # In a real implementation, this could be more sophisticated
-            from hatch_validator.utils.registry_client import RegistryClient
-            
-            class MockRegistryClient(RegistryClient):
-                def __init__(self, registry_data):
-                    self.registry_data = registry_data
-                    self._loaded = True
-                
-                def load_registry_data(self) -> bool:
-                    return True
-                
-                def get_package_info(self, package_name: str):
-                    packages = self.registry_data.get('packages', {})
-                    if package_name in packages:
-                        package_data = packages[package_name]
-                        versions = []
-                        if 'versions' in package_data:
-                            versions = list(package_data['versions'].keys())
-                        elif 'version' in package_data:
-                            versions = [package_data['version']]
-                        
-                        from hatch_validator.utils.registry_client import PackageInfo
-                        return PackageInfo(package_name, versions, package_data)
-                    return None
-                
-                def package_exists(self, package_name: str) -> bool:
-                    packages = self.registry_data.get('packages', {})
-                    return package_name in packages
-                
-                def get_all_packages(self) -> List[str]:
-                    packages = self.registry_data.get('packages', {})
-                    return list(packages.keys())
-                
-                def is_loaded(self) -> bool:
-                    return self._loaded
-            
-            mock_client = MockRegistryClient(context.registry_data)
-            self.registry_manager = RegistryManager(mock_client)
-        
-        return self.registry_manager
+        self.registry_manager = RegistryManager().get_instance()
     
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate dependencies according to v1.1.0 schema using utility modules.
@@ -292,15 +240,8 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
         dep_name = dep.get('name')
         version_constraint = dep.get('version_constraint')
         
-        # Get registry manager
-        registry_manager = self._get_registry_manager(context)
-        if not registry_manager:
-            # If no registry data, we can't validate registry dependencies
-            logger.warning(f"No registry data available to validate dependency '{dep_name}'")
-            return True, []  # Don't fail validation if no registry available
-        
         # Check if package exists in registry
-        exists, error = registry_manager.validate_package_exists(dep_name)
+        exists, error = self.registry_manager.validate_package_exists(dep_name)
         if not exists:
             errors.append(f"Registry dependency '{dep_name}' not found: {error}")
             is_valid = False
