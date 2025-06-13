@@ -10,8 +10,9 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-from .schema_validators import ValidatorFactory, ValidationContext
-from .schemas_retriever import get_registry_schema
+from .core.validator_factory import ValidatorFactory
+from .core.validation_context import ValidationContext
+from .schemas.schemas_retriever import get_registry_schema
 
 
 class PackageValidationError(Exception):
