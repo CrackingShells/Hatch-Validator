@@ -5,7 +5,7 @@ for graph operations, version constraints, and registry interactions.
 """
 
 import logging
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 from pathlib import Path
 
 from hatch_validator.core.validation_strategy import DependencyValidationStrategy
@@ -259,6 +259,9 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
                               context: ValidationContext) -> DependencyGraph:
         """Build a dependency graph from Hatch dependencies.
         
+        This method builds a complete dependency graph including all transitive dependencies
+        for both local and remote packages, similar to the legacy implementation.
+        
         Args:
             hatch_dependencies (List[Dict]): List of Hatch dependency definitions
             context (ValidationContext): Validation context
@@ -269,21 +272,27 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
         graph = DependencyGraph()
         
         # Get the current package name if available
-        current_package = context.get_data("current_package_name", "current_package")
-        
+        pkg_name, _ = context.get_data("pending_update", ("current_package", None))
+                
         # Add current package to graph
-        graph.add_package(current_package)
+        graph.add_package(pkg_name)
         
-        # Add dependencies
+        # Track processed dependencies to avoid infinite recursion
+        processed = set()
+        
+        # Add dependencies and their transitive dependencies
         for dep in hatch_dependencies:
             dep_name = dep.get('name')
             if dep_name:
-                graph.add_dependency(current_package, dep_name)
+                graph.add_dependency(pkg_name, dep_name)
                 
-                # For local dependencies, recursively add their dependencies
+                # Add transitive dependencies based on dependency type
                 dep_type = dep.get('type', {})
                 if dep_type.get('type') == 'local':
                     self._add_local_dependency_graph(dep, graph, context)
+                else:
+                    # Handle remote dependencies (default type)
+                    self._add_remote_dependency_graph(dep, graph, context, processed)
         
         return graph
     
@@ -333,6 +342,87 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
                             
             except Exception as e:
                 logger.warning(f"Could not load metadata for local dependency '{dep_name}': {e}")
+    
+    def _add_remote_dependency_graph(self, dep: Dict, graph: DependencyGraph, 
+                                    context: ValidationContext, processed: Set[str] = None) -> None:
+        """Add remote dependency and its transitive dependencies to the graph.
+        
+        This method uses the registry to fetch the complete dependency information
+        for a remote package, handling the differential storage format.
+        
+        Args:
+            dep (Dict): Remote dependency definition
+            graph (DependencyGraph): Graph to add dependencies to
+            context (ValidationContext): Validation context
+            processed (Set[str], optional): Set of already processed dependencies to avoid cycles
+        """
+        if processed is None:
+            processed = set()
+            
+        dep_name = dep.get('name')
+        if not dep_name or dep_name in processed:
+            return
+            
+        processed.add(dep_name)
+        
+        try:
+            # Get registry data from context or registry manager
+            registry_data = getattr(context, 'registry_data', None)
+            if not registry_data and hasattr(self.registry_manager, 'get_registry_data'):
+                registry_data = self.registry_manager.get_registry_data()
+            
+            if not registry_data:
+                logger.warning(f"No registry data available for remote dependency '{dep_name}'")
+                return
+            
+            # Get the appropriate registry accessor
+            accessor = self.registry_manager.get_accessor(registry_data)
+            if not accessor:
+                logger.warning(f"No suitable registry accessor found for remote dependency '{dep_name}'")
+                return
+            
+            # Find compatible version
+            version_constraint = dep.get('version_constraint')
+            compatible_version = None
+            
+            if hasattr(accessor, 'find_compatible_version'):
+                compatible_version = accessor.find_compatible_version(registry_data, dep_name, version_constraint)
+            else:
+                # Fallback: get latest version if accessor doesn't support version finding
+                versions = accessor.get_package_versions(registry_data, dep_name)
+                compatible_version = versions[-1] if versions else None
+            
+            if not compatible_version:
+                logger.warning(f"No compatible version found for remote dependency '{dep_name}' with constraint '{version_constraint}'")
+                return
+            
+            # Get reconstructed package dependencies
+            if hasattr(accessor, 'get_package_dependencies'):
+                package_metadata = accessor.get_package_dependencies(registry_data, dep_name, compatible_version)
+            else:
+                logger.warning(f"Registry accessor does not support dependency reconstruction for '{dep_name}'")
+                return
+            
+            # Add transitive hatch dependencies to the graph
+            remote_hatch_deps = package_metadata.get('hatch_dependencies', [])
+            for remote_dep in remote_hatch_deps:
+                remote_dep_name = remote_dep.get('name')
+                if remote_dep_name:
+                    graph.add_dependency(dep_name, remote_dep_name)
+                    
+                    # Recursively add transitive dependencies if not already processed
+                    if remote_dep_name not in processed:
+                        # Determine if this is a local or remote dependency
+                        remote_dep_type = remote_dep.get('type', {})
+                        if remote_dep_type.get('type') == 'local':
+                            self._add_local_dependency_graph(remote_dep, graph, context)
+                        else:
+                            # Recursively process remote dependencies
+                            self._add_remote_dependency_graph(remote_dep, graph, context, processed)
+                            
+        except Exception as e:
+            logger.warning(f"Error processing remote dependency '{dep_name}': {e}")
+            # Continue processing other dependencies even if this one fails
     
     def _validate_python_dependencies(self, python_dependencies: List[Dict]) -> Tuple[bool, List[str]]:
         """Validate Python package dependencies format.
