@@ -18,10 +18,11 @@ from hatch_validator.core.validator_factory import ValidatorFactory
 from hatch_validator.schemas.v1_1_0.schema_validators import (
     SchemaValidator as SchemaV1_1_0Validator,
     SchemaValidation as SchemaValidationV1_1_0,
-    DependencyValidation as DependencyValidationV1_1_0,
+    #DependencyValidation as DependencyValidationV1_1_0,
     ToolsValidation as ToolsValidationV1_1_0,
     EntryPointValidation as EntryPointValidationV1_1_0
 )
+from hatch_validator.schemas.v1_1_0.dependency_validation_strategy import DependencyValidationV1_1_0
 
 
 class TestValidatorFactory(unittest.TestCase):
