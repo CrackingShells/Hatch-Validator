@@ -1075,6 +1075,43 @@ class RegistryManager:
         except Exception as e:
             return False, f"Unexpected error checking package version: {e}"
     
+    def validate_version_compatibility(self, package_name: str, version_constraint: str) -> Tuple[bool, Optional[str]]:
+        """Validate that a version constraint can be satisfied by available package versions.
+        
+        Args:
+            package_name (str): Name of the package.
+            version_constraint (str): Version constraint (e.g. '>=1.0.0').
+            
+        Returns:
+            Tuple[bool, Optional[str]]: A tuple containing:
+                - bool: Whether the constraint can be satisfied
+                - Optional[str]: Error message if validation fails, None otherwise
+        """
+        try:
+            from packaging import specifiers
+            
+            package_info = self.registry_client.get_package_info(package_name)
+            if package_info is None:
+                return False, f"Package '{package_name}' not found in registry"
+            
+            if not package_info.versions:
+                return False, f"Package '{package_name}' has no versions available in registry"
+            
+            # Create a specifier set from the constraint
+            spec_set = specifiers.SpecifierSet(version_constraint)
+            
+            # Check if any available version satisfies the constraint
+            compatible_versions = [v for v in package_info.versions if spec_set.contains(v)]
+            
+            if compatible_versions:
+                return True, None
+            else:
+                available_versions = ', '.join(package_info.versions)
+                return False, f"No version of '{package_name}' satisfies constraint {version_constraint}. Available versions: {available_versions}"
+                
+        except Exception as e:
+            return False, f"Error checking version compatibility: {e}"
+    
     def get_missing_packages(self, package_names: List[str]) -> List[str]:
         """Get list of packages that don't exist in the registry.
         

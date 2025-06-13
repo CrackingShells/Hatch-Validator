@@ -10,9 +10,9 @@ from pathlib import Path
 
 from hatch_validator.core.validation_strategy import DependencyValidationStrategy
 from hatch_validator.core.validation_context import ValidationContext
-from hatch_validator.utils.dependency_graph import DependencyGraph, DependencyGraphError
-from hatch_validator.utils.version_utils import VersionConstraintValidator, VersionConstraintError
-from hatch_validator.utils.registry_client import RegistryManager, LocalFileRegistryClient, RegistryError
+from hatch_validator.utils.dependency_graph import DependencyGraph
+from hatch_validator.utils.version_utils import VersionConstraintValidator
+from hatch_validator.utils.registry_client import RegistryManager
 
 logger = logging.getLogger("hatch.dependency_validation_v1_1_0")
 
@@ -246,10 +246,12 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
             errors.append(f"Registry dependency '{dep_name}' not found: {error}")
             is_valid = False
         elif version_constraint:
-            # If package exists and has version constraint, validate it
-            # For now, we just validate the constraint format since we already did package existence
-            # In a more sophisticated implementation, we could validate specific versions
-            pass
+            # Check if the available version satisfies the constraint
+            version_compatible, version_error = self.registry_manager.validate_version_compatibility(
+                dep_name, version_constraint            )
+            if not version_compatible:
+                errors.append(f"No version of '{dep_name}' satisfies constraint {version_constraint}: {version_error}")
+                is_valid = False
         
         return is_valid, errors
     
