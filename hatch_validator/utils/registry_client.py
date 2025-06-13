@@ -950,16 +950,77 @@ class RegistryManager:
     
     Provides a high-level interface for working with package registries,
     including validation of package dependencies against registry data.
+    
+    This class implements the singleton pattern to ensure only one instance
+    exists throughout the application.
     """
     
-    def __init__(self, registry_client: RegistryClient):
+    _instance: Optional['RegistryManager'] = None
+    _lock = threading.Lock()
+    
+    def __new__(cls, registry_client: Optional[RegistryClient] = None):
+        """Create or return the singleton instance.
+        
+        Args:
+            registry_client (Optional[RegistryClient]): Registry client to use.
+                Only used when creating the first instance.
+                
+        Returns:
+            RegistryManager: The singleton instance.
+        """
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    if registry_client is None:
+                        raise ValueError("registry_client must be provided when creating the first instance")
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self, registry_client: Optional[RegistryClient] = None):
         """Initialize the registry manager.
         
         Args:
+            registry_client (Optional[RegistryClient]): Registry client to use.
+                Only used when creating the first instance.
+        """
+        if not hasattr(self, '_initialized') or not self._initialized:
+            if registry_client is None and not hasattr(self, 'registry_client'):
+                raise ValueError("registry_client must be provided when creating the first instance")
+            if registry_client is not None:
+                self.registry_client = registry_client
+            self._initialized = True
+    
+    @classmethod
+    def get_instance(cls, registry_client: Optional[RegistryClient] = None) -> 'RegistryManager':
+        """Get the singleton instance of RegistryManager.
+        
+        Args:
+            registry_client (Optional[RegistryClient]): Registry client to use.
+                Only used when creating the first instance.
+                
+        Returns:
+            RegistryManager: The singleton instance.
+        """
+        return cls(registry_client)
+    
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reset the singleton instance.
+        
+        This method is primarily useful for testing purposes.
+        """
+        with cls._lock:
+            cls._instance = None
+
+    def set_registry_client(registry_client: RegistryClient) -> None:
+        """Set the registry client for the manager.
+
+        Args:
             registry_client (RegistryClient): Registry client to use.
         """
-        self.registry_client = registry_client
-    
+        RegistryManager.get_instance().registry_client = registry_client
+
     def validate_package_exists(self, package_name: str) -> Tuple[bool, Optional[str]]:
         """Validate that a package exists in the registry.
         
