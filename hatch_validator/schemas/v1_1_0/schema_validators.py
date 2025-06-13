@@ -13,16 +13,16 @@ from typing import Dict, List, Tuple
 
 import jsonschema
 
-from .schema_validators import (
-    SchemaValidator,
-    ValidationContext,
+from hatch_validator.core.validator_base import SchemaValidator
+from hatch_validator.core.validation_context import ValidationContext
+from hatch_validator.core.validation_strategy import (
     DependencyValidationStrategy,
     ToolsValidationStrategy,
     EntryPointValidationStrategy,
     SchemaValidationStrategy
 )
-from .schemas_retriever import get_package_schema
-from .dependency_resolver import DependencyResolver
+from hatch_validator.schemas.schemas_retriever import get_package_schema
+from .dependency_resolver import DependencyResolver, DependencyResolutionError
 
 
 # Configure logging
@@ -30,7 +30,7 @@ logger = logging.getLogger("hatch.schema_validators_v1_1_0")
 logger.setLevel(logging.INFO)
 
 
-class SchemaValidationV1_1_0(SchemaValidationStrategy):
+class SchemaValidation(SchemaValidationStrategy):
     """Strategy for validating metadata against JSON schema for v1.1.0."""
     
     def validate_schema(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -63,7 +63,7 @@ class SchemaValidationV1_1_0(SchemaValidationStrategy):
             return False, [f"Error during schema validation: {str(e)}"]
 
 
-class DependencyValidationV1_1_0(DependencyValidationStrategy):
+class DependencyValidation(DependencyValidationStrategy):
     """Strategy for validating dependencies according to v1.1.0 schema."""
     
     def __init__(self):
@@ -171,7 +171,7 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
         return is_valid, errors
 
 
-class EntryPointValidationV1_1_0(EntryPointValidationStrategy):
+class EntryPointValidation(EntryPointValidationStrategy):
     """Strategy for validating entry point files for v1.1.0."""
     
     def validate_entry_point(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -203,7 +203,7 @@ class EntryPointValidationV1_1_0(EntryPointValidationStrategy):
         return True, []
 
 
-class ToolsValidationV1_1_0(ToolsValidationStrategy):
+class ToolsValidation(ToolsValidationStrategy):
     """Strategy for validating tool declarations for v1.1.0."""
     
     def validate_tools(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -271,7 +271,7 @@ class ToolsValidationV1_1_0(ToolsValidationStrategy):
         return all_exist, errors
 
 
-class SchemaV1_1_0Validator(SchemaValidator):
+class SchemaValidator(SchemaValidator):
     """Validator for schema version 1.1.0.
     
     This validator handles validation for packages using schema version 1.1.0,
@@ -285,10 +285,10 @@ class SchemaV1_1_0Validator(SchemaValidator):
             next_validator (SchemaValidator, optional): Next validator in chain. Defaults to None.
         """
         super().__init__(next_validator)
-        self.schema_strategy = SchemaValidationV1_1_0()
-        self.dependency_strategy = DependencyValidationV1_1_0()
-        self.entry_point_strategy = EntryPointValidationV1_1_0()
-        self.tools_strategy = ToolsValidationV1_1_0()
+        self.schema_strategy = SchemaValidation()
+        self.dependency_strategy = DependencyValidation()
+        self.entry_point_strategy = EntryPointValidation()
+        self.tools_strategy = ToolsValidation()
         
     def can_handle(self, schema_version: str) -> bool:
         """Determine if this validator can handle the given schema version.
