@@ -33,6 +33,7 @@ if __name__ == "__main__":
         print("  --v1-1-0-only           Run only v1.1.0 validator implementation tests")
         print("  --dependency-graph-only  Run only dependency graph utility tests")
         print("  --version-utils-only     Run only version constraint utility tests")
+        print("  --registry-client-only   Run only registry client utility tests")
         print("  --all                    Run all tests explicitly")
         print("  (no option)              Run all tests using discovery")
         sys.exit(0)
@@ -60,6 +61,10 @@ if __name__ == "__main__":
         # Run only version constraint utility tests
         logger.info("Running version constraint utility tests only...")
         test_suite = test_loader.loadTestsFromName("test_version_utils")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--registry-client-only":
+        # Run only registry client utility tests
+        logger.info("Running registry client utility tests only...")
+        test_suite = test_loader.loadTestsFromName("test_registry_client")
     elif len(sys.argv) > 1 and sys.argv[1] == "--all":
         # Run all tests explicitly
         logger.info("Running all Hatch-Validator tests...")
@@ -69,7 +74,8 @@ if __name__ == "__main__":
             "test_schema_validators",
             "test_schema_validators_v1_1_0",
             "test_dependency_graph",
-            "test_version_utils"
+            "test_version_utils",
+            "test_registry_client"
         ]
         test_suite = unittest.TestSuite()
         for module_name in test_modules:
