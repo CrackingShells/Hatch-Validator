@@ -13,13 +13,14 @@ from unittest.mock import Mock, patch
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hatch_validator.schema_validators import ValidationContext, ValidatorFactory
-from hatch_validator.schema_validators_v1_1_0 import (
-    SchemaV1_1_0Validator,
-    DependencyValidationV1_1_0,
-    ToolsValidationV1_1_0,
-    EntryPointValidationV1_1_0,
-    SchemaValidationV1_1_0
+from hatch_validator.core.validation_context import ValidationContext
+from hatch_validator.core.validator_factory import ValidatorFactory
+from hatch_validator.schemas.v1_1_0.schema_validators import (
+    SchemaValidator as SchemaV1_1_0Validator,
+    SchemaValidation as SchemaValidationV1_1_0,
+    DependencyValidation as DependencyValidationV1_1_0,
+    ToolsValidation as ToolsValidationV1_1_0,
+    EntryPointValidation as EntryPointValidationV1_1_0
 )
 
 
@@ -43,7 +44,7 @@ class TestValidatorFactory(unittest.TestCase):
 
 
 class TestSchemaV1_1_0Validator(unittest.TestCase):
-    """Test cases for SchemaV1_1_0Validator."""
+    """Test cases for v1.1.0 SchemaValidator."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -68,8 +69,7 @@ class TestSchemaV1_1_0Validator(unittest.TestCase):
             "author": {"name": "Test Author"},
             "license": {"name": "MIT"}
         }
-        
-        # Mock the strategies to focus on validator logic
+          # Mock the strategies to focus on validator logic
         with patch.object(self.validator.schema_strategy, 'validate_schema', return_value=(True, [])), \
              patch.object(self.validator.dependency_strategy, 'validate_dependencies', return_value=(True, [])), \
              patch.object(self.validator.tools_strategy, 'validate_tools', return_value=(True, [])), \
@@ -229,7 +229,7 @@ class TestValidationStrategies(unittest.TestCase):
         self.context = ValidationContext()
     
     def test_dependency_validation_strategy(self):
-        """Test DependencyValidationV1_1_0 strategy."""
+        """Test DependencyValidation strategy for v1.1.0."""
         strategy = DependencyValidationV1_1_0()
         
         # Test with no dependencies
@@ -256,7 +256,7 @@ class TestValidationStrategies(unittest.TestCase):
         self.assertFalse(is_valid)
     
     def test_tools_validation_strategy(self):
-        """Test ToolsValidationV1_1_0 strategy."""
+        """Test ToolsValidation strategy for v1.1.0."""
         strategy = ToolsValidationV1_1_0()
         
         # Test with no tools
@@ -266,7 +266,7 @@ class TestValidationStrategies(unittest.TestCase):
         self.assertEqual(errors, [])
     
     def test_entry_point_validation_strategy(self):
-        """Test EntryPointValidationV1_1_0 strategy."""
+        """Test EntryPointValidation strategy for v1.1.0."""
         strategy = EntryPointValidationV1_1_0()
         
         metadata = {
@@ -277,7 +277,7 @@ class TestValidationStrategies(unittest.TestCase):
         # Result depends on whether file exists in package directory
     
     def test_schema_validation_strategy(self):
-        """Test SchemaValidationV1_1_0 strategy."""
+        """Test SchemaValidation strategy for v1.1.0."""
         strategy = SchemaValidationV1_1_0()
         
         valid_metadata = {

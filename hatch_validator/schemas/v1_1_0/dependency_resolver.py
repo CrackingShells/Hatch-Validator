@@ -1,3 +1,9 @@
+"""Dependency resolver for schema version v1.1.0.
+
+This module handles dependency resolution based on the v1.1.0 schema structure,
+which includes hatch_dependencies and python_dependencies arrays.
+"""
+
 import json
 import logging
 import re
@@ -11,9 +17,10 @@ class DependencyResolutionError(Exception):
     pass
 
 class DependencyResolver:
-    """
-    Unified dependency resolver that handles both local package dependencies 
-    and registry-based dependency resolution.
+    """Unified dependency resolver for schema version v1.1.0.
+    
+    Handles both local package dependencies and registry-based dependency
+    resolution according to the v1.1.0 schema format.
     """
     
     def __init__(self, registry_data=None):

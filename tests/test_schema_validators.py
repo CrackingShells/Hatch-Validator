@@ -12,15 +12,15 @@ from typing import Dict, List, Tuple
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hatch_validator.schema_validators import (
-    ValidationContext,
-    SchemaValidator,
+from hatch_validator.core.validation_context import ValidationContext
+from hatch_validator.core.validator_base import SchemaValidator
+from hatch_validator.core.validation_strategy import (
     DependencyValidationStrategy,
     ToolsValidationStrategy,
     EntryPointValidationStrategy,
-    SchemaValidationStrategy,
-    ValidatorFactory
+    SchemaValidationStrategy
 )
+from hatch_validator.core.validator_factory import ValidatorFactory
 
 
 class ConcreteSchemaValidator(SchemaValidator):
