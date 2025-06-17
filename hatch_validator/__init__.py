@@ -30,6 +30,13 @@ from .schemas.schemas_retriever import (
     get_registry_schema
 )
 
+# Registry client utilities
+from .utils.registry_client import (
+    RegistryClient,
+    DirectRegistryClient,
+    RegistryManager
+)
+
 # Version-specific implementations will be imported when needed via the factory
 
 __all__ = [
@@ -53,4 +60,9 @@ __all__ = [
     'SchemaCache',
     'get_package_schema',
     'get_registry_schema',
+
+    # Registry client utilities
+    'RegistryClient',
+    'DirectRegistryClient',
+    'RegistryManager'
 ]
