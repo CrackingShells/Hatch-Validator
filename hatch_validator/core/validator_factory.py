@@ -4,9 +4,12 @@ This module provides the validator factory responsible for creating the appropri
 validator chain based on the target schema version.
 """
 
-from typing import Optional
+from typing import Optional, List, Dict, Type
+import logging
 
 from .validator_base import SchemaValidator
+
+logger = logging.getLogger("hatch.validator_factory")
 
 
 class ValidatorFactory:
@@ -14,51 +17,105 @@ class ValidatorFactory:
     
     This factory creates the appropriate validator chain based on the target
     schema version, setting up the Chain of Responsibility pattern correctly.
+    The factory maintains a registry of available validators and constructs
+    chains that enable proper delegation between versions.
     """
     
-    @staticmethod
-    def create_validator_chain(target_version: Optional[str] = None) -> SchemaValidator:
+    # Registry of available validator versions (newest to oldest)
+    _validator_registry: Dict[str, Type[SchemaValidator]] = {}
+    _version_order: List[str] = []
+    
+    @classmethod
+    def register_validator(cls, version: str, validator_class: Type[SchemaValidator]) -> None:
+        """Register a validator class for a specific schema version.
+        
+        Args:
+            version (str): Schema version (e.g., "1.1.0", "1.2.0")
+            validator_class (Type[SchemaValidator]): Validator class for the version
+        """
+        cls._validator_registry[version] = validator_class
+        if version not in cls._version_order:
+            cls._version_order.append(version)
+            # Sort versions in descending order (newest first)
+            cls._version_order.sort(reverse=True)
+        logger.debug(f"Registered validator for version {version}")
+    
+    @classmethod
+    def get_supported_versions(cls) -> List[str]:
+        """Get list of supported schema versions.
+        
+        Returns:
+            List[str]: List of supported versions ordered newest to oldest
+        """
+        cls._ensure_validators_loaded()
+        return cls._version_order.copy()
+    
+    @classmethod
+    def _ensure_validators_loaded(cls) -> None:
+        """Ensure all available validators are loaded and registered."""
+        if not cls._validator_registry:
+            # Import and register available validators
+            try:
+                from hatch_validator.schemas.v1_1_0.schema_validators import SchemaValidator as V110Validator
+                cls.register_validator("1.1.0", V110Validator)
+            except ImportError as e:
+                logger.warning(f"Could not load v1.1.0 validator: {e}")
+            
+            # Future versions can be added here:
+            # try:
+            #     from hatch_validator.schemas.v1_2_0.schema_validators import SchemaValidator as V120Validator
+            #     cls.register_validator("1.2.0", V120Validator)
+            # except ImportError as e:
+            #     logger.warning(f"Could not load v1.2.0 validator: {e}")
+    
+    @classmethod
+    def create_validator_chain(cls, target_version: Optional[str] = None) -> SchemaValidator:
         """Create appropriate validator chain based on target version.
         
         Creates a chain of validators ordered from newest to oldest schema versions.
-        If a specific version is requested, the chain will start with that version's
-        validator.
+        Each validator in the chain can handle its specific version and delegate
+        to older versions for unchanged validation concerns.
         
         Args:
-            target_version (str, optional): Specific schema version to target. Defaults to None.
+            target_version (str, optional): Specific schema version to target. 
+                If None, uses the latest available version. Defaults to None.
             
         Returns:
             SchemaValidator: Head of the validator chain
             
         Raises:
-            ValueError: If the target version is not supported
+            ValueError: If the target version is not supported or no validators are available
         """
-        # Import here to avoid circular imports - we can't import this at module level
-        from hatch_validator.schemas.v1_1_0.schema_validators import SchemaValidator as V110Validator
+        cls._ensure_validators_loaded()
         
-        # Create validators (newest to oldest when we have more versions)
-        v1_1_0_validator = V110Validator()
+        if not cls._validator_registry:
+            raise ValueError("No validators available")
         
-        # If specific version requested, return that validator
-        if target_version == "1.1.0":
-            return v1_1_0_validator
-        elif target_version is None:
-            # Default to v1.1.0 for now (will be latest when we add more versions)
-            return v1_1_0_validator
-        else:
-            raise ValueError(f"Unsupported schema version: {target_version}")
-            
-        # In the future, when v1.2.0 is implemented:
-        # from hatch_validator.schemas.v1_2_0.schema_validators import SchemaValidator as V120Validator
-        # v1_2_0_validator = V120Validator()
-        # v1_2_0_validator.set_next(v1_1_0_validator)
-        #
-        # if target_version == "1.2.0":
-        #     return v1_2_0_validator
-        # elif target_version == "1.1.0":
-        #     return v1_1_0_validator
-        # elif target_version is None:
-        #     # Default to latest version (v1.2.0)
-        #     return v1_2_0_validator
-        # else:
-        #     raise ValueError(f"Unsupported schema version: {target_version}")
+        # Determine target version
+        if target_version is None:
+            target_version = cls._version_order[0]  # Latest version
+        elif target_version not in cls._validator_registry:
+            raise ValueError(f"Unsupported schema version: {target_version}. "
+                           f"Supported versions: {cls._version_order}")
+        
+        logger.info(f"Creating validator chain for target version: {target_version}")
+          # Create chain starting from target version down to oldest
+        target_index = cls._version_order.index(target_version)
+        chain_versions = cls._version_order[target_index:]
+        
+        # Create validators in order (newest to oldest)
+        validators = []
+        for version in chain_versions:
+            validator_class = cls._validator_registry[version]
+            validator = validator_class()
+            validators.append(validator)
+            logger.debug(f"Created validator for version {version}")
+        
+        # Link validators (each points to the next older one)
+        for i in range(len(validators) - 1):
+            validators[i].set_next(validators[i + 1])
+            logger.debug(f"Linked validator {chain_versions[i]} -> {chain_versions[i+1]}")
+        
+        head_validator = validators[0]
+        logger.info(f"Validator chain created successfully, head: {target_version}")
+        return head_validator

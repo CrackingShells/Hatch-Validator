@@ -168,6 +168,8 @@ class SchemaValidator(SchemaValidator):
     
     This validator handles validation for packages using schema version 1.1.0,
     which includes hatch_dependencies and python_dependencies as separate arrays.
+    As the end of the validator chain, this implementation provides concrete
+    implementations for all validation methods.
     """
     def __init__(self, next_validator=None):
         """Initialize the v1.1.0 validator with strategies.
@@ -218,7 +220,7 @@ class SchemaValidator(SchemaValidator):
         is_valid = True
         
         # 1. Validate against JSON schema
-        schema_valid, schema_errors = self.schema_strategy.validate_schema(metadata, context)
+        schema_valid, schema_errors = self.validate_schema(metadata, context)
         if not schema_valid:
             all_errors.extend(schema_errors)
             is_valid = False
@@ -226,23 +228,80 @@ class SchemaValidator(SchemaValidator):
             return is_valid, all_errors
         
         # 2. Validate dependencies
-        deps_valid, deps_errors = self.dependency_strategy.validate_dependencies(metadata, context)
+        deps_valid, deps_errors = self.validate_dependencies(metadata, context)
         if not deps_valid:
             all_errors.extend(deps_errors)
             is_valid = False
         
         # 3. Validate entry point (if package directory is provided)
         if context.package_dir:
-            entry_valid, entry_errors = self.entry_point_strategy.validate_entry_point(metadata, context)
+            entry_valid, entry_errors = self.validate_entry_point(metadata, context)
             if not entry_valid:
                 all_errors.extend(entry_errors)
                 is_valid = False
             
             # 4. Validate tools (if entry point validation passed)
             if entry_valid:
-                tools_valid, tools_errors = self.tools_strategy.validate_tools(metadata, context)
+                tools_valid, tools_errors = self.validate_tools(metadata, context)
                 if not tools_valid:
                     all_errors.extend(tools_errors)
                     is_valid = False
         
         return is_valid, all_errors
+        
+    def validate_schema(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+        """Validate metadata against schema for v1.1.0.
+        
+        Args:
+            metadata (Dict): Package metadata to validate
+            context (ValidationContext): Validation context with resources
+            
+        Returns:
+            Tuple[bool, List[str]]: Validation result and errors
+        """
+        return self.schema_strategy.validate_schema(metadata, context)
+        
+    def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+        """Validate dependencies for v1.1.0.
+        
+        Args:
+            metadata (Dict): Package metadata to validate
+            context (ValidationContext): Validation context with resources
+            
+        Returns:
+            Tuple[bool, List[str]]: Validation result and errors
+        """
+        return self.dependency_strategy.validate_dependencies(metadata, context)
+        
+    def validate_entry_point(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+        """Validate entry point for v1.1.0.
+        
+        Args:
+            metadata (Dict): Package metadata to validate
+            context (ValidationContext): Validation context with resources
+            
+        Returns:
+            Tuple[bool, List[str]]: Validation result and errors
+        """
+        return self.entry_point_strategy.validate_entry_point(metadata, context)
+        
+    def validate_tools(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+        """Validate tools for v1.1.0.
+        
+        Args:
+            metadata (Dict): Package metadata to validate
+            context (ValidationContext): Validation context with resources
+            
+        Returns:
+            Tuple[bool, List[str]]: Validation result and errors
+        """
+        return self.tools_strategy.validate_tools(metadata, context)
+
+
+class DependencyValidation(DependencyValidationV1_1_0):
+    """Backward compatibility class for the DependencyValidationV1_1_0 strategy.
+    
+    This class exists to maintain compatibility with older tests that
+    import DependencyValidation directly from schema_validators.
+    """
+    pass
