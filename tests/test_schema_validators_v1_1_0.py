@@ -251,7 +251,7 @@ class TestValidationStrategies(unittest.TestCase):
             ]
         }
         # Create a context with registry data to avoid the error
-        context_with_registry = ValidationContext(registry_data={"repositories": [{"packages": []}]})
+        context_with_registry = ValidationContext(registry_data={"registry_schema_version": "1.1.0", "repositories": [{"packages": []}]})
         is_valid, errors = strategy.validate_dependencies(metadata_with_deps, context_with_registry)
         # Result depends on whether dependency is in registry - expecting failure since test_pkg doesn't exist
         self.assertFalse(is_valid)

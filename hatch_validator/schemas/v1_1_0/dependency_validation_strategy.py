@@ -12,7 +12,7 @@ from hatch_validator.core.validation_strategy import DependencyValidationStrateg
 from hatch_validator.core.validation_context import ValidationContext
 from hatch_validator.utils.dependency_graph import DependencyGraph
 from hatch_validator.utils.version_utils import VersionConstraintValidator
-from hatch_validator.utils.registry_client import RegistryManager
+from hatch_validator.utils.registry_client import RegistryManager, DirectRegistryClient
 
 logger = logging.getLogger("hatch.dependency_validation_v1_1_0")
 
@@ -25,11 +25,10 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
     - Version constraint validation
     - Registry interactions
     """
-    
     def __init__(self):
         """Initialize the dependency validation strategy."""
         self.version_validator = VersionConstraintValidator()
-        self.registry_manager = RegistryManager().get_instance()
+        # Will be initialized when used in validate_dependencies
     
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate dependencies according to v1.1.0 schema using utility modules.
@@ -47,6 +46,20 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
                 - bool: Whether dependency validation was successful
                 - List[str]: List of dependency validation errors
         """
+        # Initialize registry manager from the context if available
+        
+        # Get or create registry client from context data
+        registry_data = context.registry_data
+        registry_client = context.get_data("registry_client", None)
+        
+        if registry_client is None and registry_data is not None:
+            # Create a temporary in-memory registry client with the provided data
+            registry_client = DirectRegistryClient(registry_data)
+            registry_client._loaded = True
+        
+        # Get or create registry manager
+        self.registry_manager = RegistryManager.get_instance(registry_client)
+        
         errors = []
         is_valid = True
         
