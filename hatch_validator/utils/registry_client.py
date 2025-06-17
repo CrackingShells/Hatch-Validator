@@ -1013,14 +1013,14 @@ class RegistryManager:
         """
         with cls._lock:
             cls._instance = None
-
-    def set_registry_client(registry_client: RegistryClient) -> None:
+    
+    def set_registry_client(self, registry_client: RegistryClient) -> None:
         """Set the registry client for the manager.
 
         Args:
             registry_client (RegistryClient): Registry client to use.
         """
-        RegistryManager.get_instance().registry_client = registry_client
+        self.registry_client = registry_client
 
     def validate_package_exists(self, package_name: str) -> Tuple[bool, Optional[str]]:
         """Validate that a package exists in the registry.
