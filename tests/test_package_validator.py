@@ -196,7 +196,9 @@ class TestHatchPackageValidator(unittest.TestCase):
                     pkg["versions"][0]["version"] = "0.0.9"
         
         modified_registry_client = DirectRegistryClient(registry_data=modified_registry)
-        RegistryManager.set_registry_client(modified_registry_client)
+        # Reset and get a new instance with the modified client
+        RegistryManager.reset_instance()
+        RegistryManager.get_instance(modified_registry_client)
 
         # Create a new validator with the modified registry
         validator = HatchPackageValidator(registry_data=modified_registry)
@@ -204,9 +206,9 @@ class TestHatchPackageValidator(unittest.TestCase):
         # Validate the package with version-specific dependency
         pkg_path = self.hatch_dev_path / "version_dep_pkg"
         is_valid, results = validator.validate_package(pkg_path)
-        
-        # Set the registry client back to the original for other tests
-        RegistryManager.set_registry_client(DirectRegistryClient(registry_data=self.registry_data))
+          # Set the registry client back to the original for other tests
+        RegistryManager.reset_instance()
+        RegistryManager.get_instance(DirectRegistryClient(registry_data=self.registry_data))
         
         self.assertFalse(is_valid, f"Package validation should fail with incompatible version")
         self.assertFalse(results["valid"], f"Overall validation result should be invalid for incompatible version")

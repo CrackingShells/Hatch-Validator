@@ -20,6 +20,10 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
+        # Reset singleton before test
+        from hatch_validator.utils.registry_client import RegistryManager
+        RegistryManager.reset_instance()
+        
         self.strategy = DependencyValidationV1_1_0()
         self.temp_dir = Path(tempfile.mkdtemp())
         
@@ -48,6 +52,10 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
         """Clean up test fixtures."""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        
+        # Reset singleton after test
+        from hatch_validator.utils.registry_client import RegistryManager
+        RegistryManager.reset_instance()
     
     def _create_test_context(self, allow_local=True, registry_data=None):
         """Create a test validation context.

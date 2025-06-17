@@ -271,11 +271,20 @@ class TestRegistryManager(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
+        # Reset the singleton before each test
+        RegistryManager.reset_instance()
+        
         # Create a mock registry client
         self.mock_client = Mock()
         self.mock_client.is_loaded.return_value = True
         
-        self.manager = RegistryManager(self.mock_client)
+        # Use get_instance to properly initialize the singleton
+        self.manager = RegistryManager.get_instance(self.mock_client)
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        # Reset the singleton after each test
+        RegistryManager.reset_instance()
     
     def test_validate_package_exists_true(self):
         """Test package validation for existing package."""
