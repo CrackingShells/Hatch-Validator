@@ -103,7 +103,7 @@ class TestHatchPackageValidator(unittest.TestCase):
                                         # Add dependencies as differential changes
                                         "hatch_dependencies_added": [
                                             {
-                                                "name": dep["ame"],
+                                                "name": dep["name"],
                                                 "version_constraint": dep.get("version_constraint", "")
                                             }
                                             for dep in metadata.get("hatch_dependencies", [])
@@ -123,7 +123,8 @@ class TestHatchPackageValidator(unittest.TestCase):
                             # Add to registry
                             registry["repositories"][0]["packages"].append(pkg_entry)
                     except Exception as e:
-                        logger.warning(f"Failed to load metadata for {pkg_name}: {e}")
+                        logger.error(f"Failed to load metadata for {pkg_name}: {e}")
+                        raise e
 
         return registry
     
