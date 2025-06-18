@@ -30,12 +30,9 @@ from .schemas.schemas_retriever import (
     get_registry_schema
 )
 
-# Registry client utilities
-from .utils.registry_client import (
-    RegistryClient,
-    DirectRegistryClient,
-    RegistryManager
-)
+# Registry Access
+from .registry.registry_service import RegistryService
+from .registry.v1_1_0.registry_accessor import RegistryAccessor as V110RegistryAccessor
 
 # Version-specific implementations will be imported when needed via the factory
 
@@ -61,8 +58,7 @@ __all__ = [
     'get_package_schema',
     'get_registry_schema',
 
-    # Registry client utilities
-    'RegistryClient',
-    'DirectRegistryClient',
-    'RegistryManager'
+    # Registry Access
+    'RegistryService',
+    'V110RegistryAccessor'
 ]

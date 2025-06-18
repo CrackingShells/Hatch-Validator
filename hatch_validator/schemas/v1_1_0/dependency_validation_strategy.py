@@ -12,7 +12,7 @@ from hatch_validator.core.validation_strategy import DependencyValidationStrateg
 from hatch_validator.core.validation_context import ValidationContext
 from hatch_validator.utils.dependency_graph import DependencyGraph
 from hatch_validator.utils.version_utils import VersionConstraintValidator
-from hatch_validator.utils.registry_client import RegistryManager, DirectRegistryClient
+from hatch_validator.registry.registry_service import RegistryService
 
 logger = logging.getLogger("hatch.dependency_validation_v1_1_0")
 
@@ -28,7 +28,7 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
     def __init__(self):
         """Initialize the dependency validation strategy."""
         self.version_validator = VersionConstraintValidator()
-        # Will be initialized when used in validate_dependencies
+        # Registry service will be initialized when used in validate_dependencies
     
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate dependencies according to v1.1.0 schema using utility modules.
@@ -44,21 +44,23 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
         Returns:
             Tuple[bool, List[str]]: Tuple containing:
                 - bool: Whether dependency validation was successful
-                - List[str]: List of dependency validation errors
-        """
-        # Initialize registry manager from the context if available
-        
-        # Get or create registry client from context data
+                - List[str]: List of dependency validation errors        """
+        # Initialize registry service from the context if available
+        # Get registry data from context
         registry_data = context.registry_data
-        registry_client = context.get_data("registry_client", None)
+        registry_service = context.get_data("registry_service", None)
         
-        if registry_client is None and registry_data is not None:
-            # Create a temporary in-memory registry client with the provided data
-            registry_client = DirectRegistryClient(registry_data)
-            registry_client._loaded = True
+        # Check if registry data is missing
+        if registry_data is None:
+            logger.error("No registry data available for dependency validation")
+            return False, ["No registry data available for dependency validation"]
         
-        # Get or create registry manager
-        self.registry_manager = RegistryManager.get_instance(registry_client)
+        if registry_service is None:
+            # Create a registry service with the provided data
+            registry_service = RegistryService(registry_data)
+        
+        # Store registry service for use in helper methods
+        self.registry_service = registry_service
         
         errors = []
         is_valid = True
@@ -249,19 +251,19 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
         """
         errors = []
         is_valid = True
-        
+    
         dep_name = dep.get('name')
         version_constraint = dep.get('version_constraint')
         
         # Check if package exists in registry
-        exists, error = self.registry_manager.validate_package_exists(dep_name)
+        exists, error = self.registry_service.validate_package_exists(dep_name)
         if not exists:
             errors.append(f"Registry dependency '{dep_name}' not found: {error}")
             is_valid = False
         elif version_constraint:
             # Check if the available version satisfies the constraint
-            version_compatible, version_error = self.registry_manager.validate_version_compatibility(
-                dep_name, version_constraint            )
+            version_compatible, version_error = self.registry_service.validate_version_compatibility(
+                dep_name, version_constraint)
             if not version_compatible:
                 errors.append(f"No version of '{dep_name}' satisfies constraint {version_constraint}: {version_error}")
                 is_valid = False
@@ -377,44 +379,26 @@ class DependencyValidationV1_1_0(DependencyValidationStrategy):
             return
             
         processed.add(dep_name)
-        
         try:
-            # Get registry data from context or registry manager
-            registry_data = getattr(context, 'registry_data', None)
-            if not registry_data and hasattr(self.registry_manager, 'get_registry_data'):
-                registry_data = self.registry_manager.get_registry_data()
-            
-            if not registry_data:
-                logger.warning(f"No registry data available for remote dependency '{dep_name}'")
+            # Use registry service if available
+            if not hasattr(self, 'registry_service') or not self.registry_service:
+                logger.warning(f"No registry service available for remote dependency '{dep_name}'")
                 return
             
-            # Get the appropriate registry accessor
-            accessor = self.registry_manager.get_accessor(registry_data)
-            if not accessor:
-                logger.warning(f"No suitable registry accessor found for remote dependency '{dep_name}'")
+            if not self.registry_service.is_loaded():
+                logger.warning(f"Registry service not loaded for remote dependency '{dep_name}'")
                 return
             
-            # Find compatible version
+            # Find compatible version using registry service
             version_constraint = dep.get('version_constraint')
-            compatible_version = None
-            
-            if hasattr(accessor, 'find_compatible_version'):
-                compatible_version = accessor.find_compatible_version(registry_data, dep_name, version_constraint)
-            else:
-                # Fallback: get latest version if accessor doesn't support version finding
-                versions = accessor.get_package_versions(registry_data, dep_name)
-                compatible_version = versions[-1] if versions else None
+            compatible_version = self.registry_service.find_compatible_version(dep_name, version_constraint)
             
             if not compatible_version:
                 logger.warning(f"No compatible version found for remote dependency '{dep_name}' with constraint '{version_constraint}'")
                 return
             
             # Get reconstructed package dependencies
-            if hasattr(accessor, 'get_package_dependencies'):
-                package_metadata = accessor.get_package_dependencies(registry_data, dep_name, compatible_version)
-            else:
-                logger.warning(f"Registry accessor does not support dependency reconstruction for '{dep_name}'")
-                return
+            package_metadata = self.registry_service.get_package_dependencies(dep_name, compatible_version)
             
             # Add transitive hatch dependencies to the graph
             remote_hatch_deps = package_metadata.get('hatch_dependencies', [])

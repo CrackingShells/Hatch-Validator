@@ -68,11 +68,6 @@ def configure_parser():
         help="Run only version constraint utility tests"
     )
     test_type.add_argument(
-        "--registry-client-only",
-        action="store_true",
-        help="Run only registry client utility tests"
-    )
-    test_type.add_argument(
         "--dependency-v1-1-0-only",
         action="store_true",
         help="Run only v1.1.0 dependency validation tests"
@@ -147,9 +142,6 @@ def run_tests(args):
     elif args.version_utils_only:
         logger.info("Running version constraint utility tests only...")
         test_suite = test_loader.loadTestsFromName("test_version_utils")
-    elif args.registry_client_only:
-        logger.info("Running registry client utility tests only...")
-        test_suite = test_loader.loadTestsFromName("test_registry_client")
     elif args.dependency_v1_1_0_only:
         logger.info("Running v1.1.0 dependency validation tests only...")
         test_suite = test_loader.loadTestsFromName("test_dependency_validation_v1_1_0")
@@ -163,7 +155,6 @@ def run_tests(args):
             "test_schema_validators_v1_1_0",
             "test_dependency_graph",
             "test_version_utils",
-            "test_registry_client",
             "test_dependency_validation_v1_1_0"
         ]
         test_suite = unittest.TestSuite()
