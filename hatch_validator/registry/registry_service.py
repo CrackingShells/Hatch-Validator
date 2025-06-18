@@ -1,7 +1,4 @@
 """Registry service for package registry operations.
-
-This module provides a non-singleton service for registry operations, replacing
-the singleton RegistryManager with a cleaner, more testable architecture.
 """
 
 from typing import Optional, Dict, List, Any, Tuple
