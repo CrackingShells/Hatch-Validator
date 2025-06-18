@@ -17,7 +17,7 @@ from hatch_validator.registry.registry_service import RegistryService
 logger = logging.getLogger("hatch.dependency_validation_v1_1_0")
 
 
-class DependencyValidationV1_1_0(DependencyValidationStrategy):
+class DependencyValidation(DependencyValidationStrategy):
     """Strategy for validating dependencies according to v1.1.0 schema using utility modules.
     
     This implementation uses the decoupled utility modules for:

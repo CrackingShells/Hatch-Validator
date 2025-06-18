@@ -16,13 +16,12 @@ import jsonschema
 from hatch_validator.core.validator_base import SchemaValidator
 from hatch_validator.core.validation_context import ValidationContext
 from hatch_validator.core.validation_strategy import (
-    DependencyValidationStrategy,
     ToolsValidationStrategy,
     EntryPointValidationStrategy,
     SchemaValidationStrategy
 )
 from hatch_validator.schemas.schemas_retriever import get_package_schema
-from .dependency_validation_strategy import DependencyValidationV1_1_0
+from hatch_validator.schemas.v1_1_0.dependency_validation import DependencyValidation
 
 
 # Configure logging
@@ -179,7 +178,7 @@ class SchemaValidator(SchemaValidator):
         """
         super().__init__(next_validator)
         self.schema_strategy = SchemaValidation()
-        self.dependency_strategy = DependencyValidationV1_1_0()
+        self.dependency_strategy = DependencyValidation()
         self.entry_point_strategy = EntryPointValidation()
         self.tools_strategy = ToolsValidation()
         
@@ -296,12 +295,3 @@ class SchemaValidator(SchemaValidator):
             Tuple[bool, List[str]]: Validation result and errors
         """
         return self.tools_strategy.validate_tools(metadata, context)
-
-
-class DependencyValidation(DependencyValidationV1_1_0):
-    """Backward compatibility class for the DependencyValidationV1_1_0 strategy.
-    
-    This class exists to maintain compatibility with older tests that
-    import DependencyValidation directly from schema_validators.
-    """
-    pass
