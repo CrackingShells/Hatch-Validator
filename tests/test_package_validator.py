@@ -12,7 +12,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hatch_validator.package_validator import HatchPackageValidator, PackageValidationError
-from hatch_validator.utils.registry_client import DirectRegistryClient, RegistryManager
+from hatch_validator.registry.registry_service import RegistryService
 
 # Configure logging
 logging.basicConfig(
@@ -24,7 +24,7 @@ logger = logging.getLogger("hatch.validator_tests")
 
 class TestHatchPackageValidator(unittest.TestCase):
     """Tests for the Hatch package validator using real packages from Hatch-Dev."""
-
+    
     def setUp(self):
         """Set up test environment before each test."""
         # Path to Hatch-Dev packages
@@ -35,8 +35,8 @@ class TestHatchPackageValidator(unittest.TestCase):
         # Build registry data structure from Hatch-Dev packages
         self.registry_data = self._build_test_registry()
 
-        drc = DirectRegistryClient(registry_data=self.registry_data)
-        RegistryManager(drc)
+        # Create registry service with the test data
+        self.registry_service = RegistryService(self.registry_data)
 
         # Create validator with registry data
         self.validator = HatchPackageValidator(registry_data=self.registry_data)
@@ -103,7 +103,7 @@ class TestHatchPackageValidator(unittest.TestCase):
                                         # Add dependencies as differential changes
                                         "hatch_dependencies_added": [
                                             {
-                                                "name": dep["name"],
+                                                "name": dep["ame"],
                                                 "version_constraint": dep.get("version_constraint", "")
                                             }
                                             for dep in metadata.get("hatch_dependencies", [])
@@ -193,12 +193,9 @@ class TestHatchPackageValidator(unittest.TestCase):
                 if pkg["name"] == "base_pkg_1":
                     # Change the version to be incompatible
                     pkg["latest_version"] = "0.0.9"
-                    pkg["versions"][0]["version"] = "0.0.9"
-        
-        modified_registry_client = DirectRegistryClient(registry_data=modified_registry)
-        # Reset and get a new instance with the modified client
-        RegistryManager.reset_instance()
-        RegistryManager.get_instance(modified_registry_client)
+                    pkg["versions"][0]["version"] = "0.0.9"        
+        # Create a new registry service with the modified registry
+        modified_registry_service = RegistryService(modified_registry)
 
         # Create a new validator with the modified registry
         validator = HatchPackageValidator(registry_data=modified_registry)
@@ -206,9 +203,8 @@ class TestHatchPackageValidator(unittest.TestCase):
         # Validate the package with version-specific dependency
         pkg_path = self.hatch_dev_path / "version_dep_pkg"
         is_valid, results = validator.validate_package(pkg_path)
-          # Set the registry client back to the original for other tests
-        RegistryManager.reset_instance()
-        RegistryManager.get_instance(DirectRegistryClient(registry_data=self.registry_data))
+        
+        # No need to reset anything with RegistryService - each validator gets its own instance
         
         self.assertFalse(is_valid, f"Package validation should fail with incompatible version")
         self.assertFalse(results["valid"], f"Overall validation result should be invalid for incompatible version")

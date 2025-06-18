@@ -20,7 +20,7 @@ from hatch_validator.core.validator_base import SchemaValidator
 from hatch_validator.core.validation_context import ValidationContext
 from hatch_validator.core.validator_factory import ValidatorFactory
 from hatch_validator.schemas.v1_1_0.schema_validators import SchemaValidator as V110Validator
-from hatch_validator.utils.registry_client import DirectRegistryClient, RegistryManager
+from hatch_validator.registry.registry_service import RegistryService
 
 # Configure logging
 logger = logging.getLogger("hatch.dev_tests.validator_chain")
@@ -41,6 +41,7 @@ class TestValidatorEnhancements(unittest.TestCase):
         # Build registry data structure from Hatch-Dev packages
         self.registry_data = self._build_test_registry()
 
+        ### NOTE: The following line is deprecated and should be replaced with the new registry API. see hatch_validator.registry.registry_manager
         drc = DirectRegistryClient(registry_data=self.registry_data)
         RegistryManager(drc)
         

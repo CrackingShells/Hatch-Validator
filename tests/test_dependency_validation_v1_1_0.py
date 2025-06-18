@@ -7,22 +7,20 @@ and registry interactions.
 
 import unittest
 import tempfile
+import shutil
 import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from hatch_validator.core.validation_context import ValidationContext
 from hatch_validator.schemas.v1_1_0.dependency_validation_strategy import DependencyValidationV1_1_0
+from hatch_validator.registry.registry_service import RegistryService
 
 
 class TestDependencyValidationV1_1_0(unittest.TestCase):
     """Test cases for the DependencyValidationV1_1_0 strategy."""
-    
     def setUp(self):
         """Set up test fixtures."""
-        # Reset singleton before test
-        from hatch_validator.utils.registry_client import RegistryManager
-        RegistryManager.reset_instance()
         
         self.strategy = DependencyValidationV1_1_0()
         self.temp_dir = Path(tempfile.mkdtemp())
@@ -43,19 +41,15 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
                 },
                 "package_c": {
                     "version": "3.0.0",
-                    "dependencies": []
-                }
+                    "dependencies": []                }
             }
         }
     
     def tearDown(self):
         """Clean up test fixtures."""
-        import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         
-        # Reset singleton after test
-        from hatch_validator.utils.registry_client import RegistryManager
-        RegistryManager.reset_instance()
+        # No longer need to reset singleton with RegistryService
     
     def _create_test_context(self, allow_local=True, registry_data=None):
         """Create a test validation context.
@@ -67,11 +61,18 @@ class TestDependencyValidationV1_1_0(unittest.TestCase):
         Returns:
             ValidationContext: Test validation context
         """
-        return ValidationContext(
+        data = registry_data or self.registry_data
+        context = ValidationContext(
             package_dir=self.temp_dir,
-            registry_data=registry_data or self.registry_data,
+            registry_data=data,
             allow_local_dependencies=allow_local
         )
+        
+        # Add registry service to context for the new architecture
+        registry_service = RegistryService(data)
+        context.add_data("registry_service", registry_service)
+        
+        return context
     
     def test_validate_empty_dependencies(self):
         """Test validation with no dependencies."""
