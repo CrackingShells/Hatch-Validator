@@ -56,8 +56,8 @@ class RegistryAccessorFactory:
         """Ensure all available accessors are loaded and registered."""
         if not cls._accessor_registry:
             # Import and register v1.2.0 accessor (newest first)
-            from hatch_validator.registry.v1_2_0.registry_accessor import RegistryAccessor as V120RegistryAccessor
-            cls.register_accessor('1.2.0', V120RegistryAccessor)
+            # from hatch_validator.registry.v1_2_0.registry_accessor import RegistryAccessor as V120RegistryAccessor
+            # cls.register_accessor('1.2.0', V120RegistryAccessor)
             
             # Import and register v1.1.0 accessor
             from hatch_validator.registry.v1_1_0.registry_accessor import RegistryAccessor as V110RegistryAccessor
