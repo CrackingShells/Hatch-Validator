@@ -56,7 +56,7 @@ class ValidatorFactory:
         if not cls._validator_registry:
             # Import and register available validators
             try:
-                from hatch_validator.schemas.v1_1_0.schema_validators import Validator as V110Validator
+                from hatch_validator.schemas.v1_1_0.validator import Validator as V110Validator
                 cls.register_validator("1.1.0", V110Validator)
             except ImportError as e:
                 logger.warning(f"Could not load v1.1.0 validator: {e}")

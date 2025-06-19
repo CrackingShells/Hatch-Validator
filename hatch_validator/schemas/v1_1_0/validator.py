@@ -8,7 +8,7 @@ and Strategy patterns.
 import logging
 from typing import Dict, List, Tuple
 
-from hatch_validator.core.validator_base import SchemaValidator as SchemaValidatorBase
+from hatch_validator.core.validator_base import Validator as ValidatorBase
 from hatch_validator.core.validation_context import ValidationContext
 
 from .dependency_validation import DependencyValidation
@@ -18,22 +18,26 @@ from .tools_validation import ToolsValidation
 
 
 # Configure logging
-logger = logging.getLogger("hatch.schema.v1_1_0.schema_validators")
+logger = logging.getLogger("hatch.schema.v1_1_0.validator")
 logger.setLevel(logging.INFO)
 
-class SchemaValidator(SchemaValidatorBase):
-    """Validator for schema version 1.1.0.
+class Validator(ValidatorBase):
+    """Validator for packages using schema version 1.1.0
     
-    This validator handles validation for packages using schema version 1.1.0,
-    which includes hatch_dependencies and python_dependencies as separate arrays.
+    Schema version 1.1.0 includes hatch_dependencies and python_dependencies
+    as separate arrays.
     As the end of the validator chain, this implementation provides concrete
     implementations for all validation methods.
+    
+    Note:
+        This validator is the first to be implemented since the introduction
+        of the chain of responsibility pattern, so it is the last in the chain.
     """
     def __init__(self, next_validator=None):
         """Initialize the v1.1.0 validator with strategies.
         
         Args:
-            next_validator (SchemaValidator, optional): Next validator in chain. Defaults to None.
+            next_validator (Validator, optional): Next validator in chain. Defaults to None.
         """
         super().__init__(next_validator)
         self.schema_strategy = SchemaValidation()
@@ -53,7 +57,7 @@ class SchemaValidator(SchemaValidatorBase):
         return schema_version == "1.1.0"
     
     def validate(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
-        """Validate metadata against v1.1.0 schema.
+        """Validation entry point for packages following schema v1.1.0.
         
         Args:
             metadata (Dict): Package metadata to validate
