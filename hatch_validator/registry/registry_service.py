@@ -1,8 +1,12 @@
 """Registry service for package registry operations.
+
+Provides a high-level interface for working with package registries, including
+validation of package dependencies against registry data.
 """
 
-from typing import Optional, Dict, List, Any, Tuple
 import logging
+from packaging import specifiers
+from typing import Optional, Dict, List, Any, Tuple
 
 from .registry_accessor_factory import RegistryAccessorFactory
 from .registry_accessor_base import RegistryAccessorBase, RegistryError
@@ -12,7 +16,7 @@ logger = logging.getLogger("hatch.registry_service")
 
 class RegistryService:
     """Service for registry operations.
-    
+
     Provides a high-level interface for working with package registries,
     including validation of package dependencies against registry data.
     This service uses the accessor chain pattern to handle different
@@ -21,7 +25,7 @@ class RegistryService:
     
     def __init__(self, registry_data: Optional[Dict[str, Any]] = None):
         """Initialize the registry service.
-        
+
         Args:
             registry_data (Dict[str, Any], optional): Initial registry data.
         """
@@ -32,10 +36,10 @@ class RegistryService:
     
     def load_registry_data(self, registry_data: Dict[str, Any]) -> None:
         """Load registry data and initialize appropriate accessor.
-        
+
         Args:
             registry_data (Dict[str, Any]): Registry data to load.
-            
+
         Raises:
             RegistryError: If no accessor can handle the registry data.
         """
@@ -49,10 +53,10 @@ class RegistryService:
     
     def load_registry_from_file(self, file_path: str) -> None:
         """Load registry data from a JSON file.
-        
+
         Args:
             file_path (str): Path to the registry JSON file.
-            
+
         Raises:
             RegistryError: If file cannot be read or contains invalid data.
         """
@@ -66,7 +70,7 @@ class RegistryService:
     
     def is_loaded(self) -> bool:
         """Check if registry data is loaded.
-        
+
         Returns:
             bool: True if registry data is loaded and accessible.
         """
@@ -74,19 +78,22 @@ class RegistryService:
     
     def get_package_info(self, package_name: str) -> Optional[Dict[str, Any]]:
         """Get information about a package.
-        
+
         Args:
             package_name (str): Name of the package to look up.
-            
+
         Returns:
             Optional[Dict[str, Any]]: Package information as dictionary, or None if not found.
                 Contains keys: name, versions, metadata
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            logger.warning("Registry data not loaded when getting package info")
-            return None
+            raise RegistryError("Registry data not loaded")
         
         if not self._accessor.package_exists(self._registry_data, package_name):
+            logger.warning(f"Package '{package_name}' does not exist in the registry.")
             return None
         
         versions = self._accessor.get_package_versions(self._registry_data, package_name)
@@ -100,29 +107,35 @@ class RegistryService:
     
     def package_exists(self, package_name: str) -> bool:
         """Check if a package exists in the registry.
-        
+
         Args:
             package_name (str): Name of the package to check.
-            
+
         Returns:
             bool: True if package exists.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            return False
+            raise RegistryError("Registry data not loaded")
         
         return self._accessor.package_exists(self._registry_data, package_name)
     
     def get_package_versions(self, package_name: str) -> List[str]:
         """Get all versions for a package.
-        
+
         Args:
             package_name (str): Package name.
-            
+
         Returns:
             List[str]: List of version strings, empty if package not found.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            return []
+            raise RegistryError("Registry data not loaded")
         
         if not self.package_exists(package_name):
             return []
@@ -131,27 +144,33 @@ class RegistryService:
     
     def get_all_package_names(self) -> List[str]:
         """Get all package names from registry.
-        
+
         Returns:
             List[str]: List of all package names, empty if registry not loaded.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            return []
+            raise RegistryError("Registry data not loaded")
         
         return self._accessor.get_all_package_names(self._registry_data)
     
     def get_package_dependencies(self, package_name: str, version: Optional[str] = None) -> Dict[str, Any]:
         """Get reconstructed dependencies for a specific package version.
-        
+
         Args:
             package_name (str): Package name.
             version (str, optional): Specific version. If None, uses latest version.
-            
+
         Returns:
             Dict[str, Any]: Reconstructed package metadata with dependencies.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            return {}
+            raise RegistryError("Registry data not loaded")
         
         if hasattr(self._accessor, 'get_package_dependencies'):
             return self._accessor.get_package_dependencies(self._registry_data, package_name, version)
@@ -161,16 +180,19 @@ class RegistryService:
     
     def find_compatible_version(self, package_name: str, version_constraint: Optional[str] = None) -> Optional[str]:
         """Find a compatible version for a package given a version constraint.
-        
+
         Args:
             package_name (str): Package name.
             version_constraint (str, optional): Version constraint (e.g., '>=1.0.0').
-            
+
         Returns:
             Optional[str]: Compatible version string, or None if not found.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            return None
+            raise RegistryError("Registry data not loaded")
         
         if hasattr(self._accessor, 'find_compatible_version'):
             return self._accessor.find_compatible_version(self._registry_data, package_name, version_constraint)
@@ -183,10 +205,10 @@ class RegistryService:
     
     def validate_package_exists(self, package_name: str) -> Tuple[bool, Optional[str]]:
         """Validate that a package exists in the registry.
-        
+
         Args:
             package_name (str): Name of the package to validate.
-            
+
         Returns:
             Tuple[bool, Optional[str]]: A tuple containing:
                 - bool: Whether the package exists
@@ -194,7 +216,7 @@ class RegistryService:
         """
         try:
             if not self.is_loaded():
-                return False, "Registry data not loaded"
+                raise RegistryError("Registry data not loaded")
             
             if self.package_exists(package_name):
                 return True, None
@@ -208,11 +230,11 @@ class RegistryService:
     
     def validate_package_version(self, package_name: str, version: str) -> Tuple[bool, Optional[str]]:
         """Validate that a specific version of a package exists.
-        
+
         Args:
             package_name (str): Name of the package.
             version (str): Version to validate.
-            
+
         Returns:
             Tuple[bool, Optional[str]]: A tuple containing:
                 - bool: Whether the version exists
@@ -220,7 +242,7 @@ class RegistryService:
         """
         try:
             if not self.is_loaded():
-                return False, "Registry data not loaded"
+                raise RegistryError("Registry data not loaded")
             
             versions = self.get_package_versions(package_name)
             if not versions:
@@ -239,11 +261,11 @@ class RegistryService:
     
     def validate_version_compatibility(self, package_name: str, version_constraint: str) -> Tuple[bool, Optional[str]]:
         """Validate that a version constraint can be satisfied by available package versions.
-        
+
         Args:
             package_name (str): Name of the package.
             version_constraint (str): Version constraint (e.g. '>=1.0.0').
-            
+
         Returns:
             Tuple[bool, Optional[str]]: A tuple containing:
                 - bool: Whether the constraint can be satisfied
@@ -251,9 +273,7 @@ class RegistryService:
         """
         try:
             if not self.is_loaded():
-                return False, "Registry data not loaded"
-            
-            from packaging import specifiers
+                raise RegistryError("Registry data not loaded")
             
             versions = self.get_package_versions(package_name)
             if not versions:
@@ -276,13 +296,19 @@ class RegistryService:
     
     def get_missing_packages(self, package_names: List[str]) -> List[str]:
         """Get list of packages that don't exist in the registry.
-        
+
         Args:
             package_names (List[str]): List of package names to check.
-            
+
         Returns:
             List[str]: List of package names that don't exist in the registry.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        
         missing = []
         for package_name in package_names:
             if not self.package_exists(package_name):
@@ -291,15 +317,21 @@ class RegistryService:
     
     def validate_dependency_list(self, dependencies: List[str]) -> Tuple[bool, List[str]]:
         """Validate a list of package dependencies against the registry.
-        
+
         Args:
             dependencies (List[str]): List of package names to validate.
-            
+
         Returns:
             Tuple[bool, List[str]]: A tuple containing:
                 - bool: Whether all dependencies are valid
                 - List[str]: List of error messages (empty if all valid)
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        
         errors = []
         
         for package_name in dependencies:
@@ -311,17 +343,16 @@ class RegistryService:
     
     def get_registry_statistics(self) -> Dict[str, int]:
         """Get statistics about the registry.
-        
+
         Returns:
             Dict[str, int]: Dictionary containing registry statistics.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         try:
             if not self.is_loaded():
-                return {
-                    'total_packages': 0,
-                    'total_versions': 0,
-                    'average_versions_per_package': 0
-                }
+                raise RegistryError("Registry data not loaded")
             
             all_packages = self.get_all_package_names()
             total_packages = len(all_packages)
@@ -336,6 +367,12 @@ class RegistryService:
                 'total_versions': total_versions,
                 'average_versions_per_package': total_versions / total_packages if total_packages > 0 else 0
             }
+        except RegistryError:
+            return {
+                'total_packages': 0,
+                'total_versions': 0,
+                'average_versions_per_package': 0
+            }
         except Exception:
             return {
                 'total_packages': 0,
@@ -345,19 +382,26 @@ class RegistryService:
     
     def get_registry_data(self) -> Optional[Dict[str, Any]]:
         """Get the raw registry data.
-        
+
         Returns:
             Optional[Dict[str, Any]]: Registry data if available, None otherwise.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
         return self._registry_data
     
     def get_schema_version(self) -> Optional[str]:
         """Get the schema version of the loaded registry data.
-        
+
         Returns:
             Optional[str]: Schema version string, or None if no data loaded.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
         """
         if not self.is_loaded():
-            return None
-        
+            raise RegistryError("Registry data not loaded")
         return self._accessor.get_schema_version(self._registry_data)
