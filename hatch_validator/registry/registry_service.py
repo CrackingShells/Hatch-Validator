@@ -10,7 +10,7 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from .registry_accessor_factory import RegistryAccessorFactory
 from .registry_accessor_base import RegistryAccessorBase, RegistryError
-from hatch_validator.utils.version_utils import VersionConstraintValidator
+from hatch_validator.utils.version_utils import VersionConstraintValidator, VersionConstraintError
 
 logger = logging.getLogger("hatch.registry_service")
 
@@ -134,13 +134,14 @@ class RegistryService:
 
         Raises:
             RegistryError: If registry data is not loaded.
+            RegistryError: If package does not exist.
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
         
         if not self.package_exists(package_name):
-            return []
-        
+            raise RegistryError(f"Package '{package_name}' does not exist in the registry")
+                
         return self._accessor.get_package_versions(self._registry_data, package_name)
     
     def get_all_package_names(self) -> List[str]:
@@ -209,9 +210,11 @@ class RegistryService:
                 v for v in sorted(versions, key=lambda x: tuple(int(p) if p.isdigit() else p for p in x.split('.')), reverse=True)
                 if VersionConstraintValidator.is_version_compatible(v, version_constraint)[0]
             ]
-            return compatible_versions[0] if compatible_versions else None
-    
-    # Validation methods
+
+            if not compatible_versions:
+                raise VersionConstraintError(f"No compatible version found for '{package_name}' with constraint '{version_constraint}'")
+        
+            return compatible_versions[0]
     
     def validate_package_exists(self, package_name: str) -> Tuple[bool, Optional[str]]:
         """Validate that a package exists in the registry.

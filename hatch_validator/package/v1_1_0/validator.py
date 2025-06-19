@@ -19,7 +19,7 @@ from .tools_validation import ToolsValidation
 
 # Configure logging
 logger = logging.getLogger("hatch.schema.v1_1_0.validator")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 class Validator(ValidatorBase):
     """Validator for packages using schema version 1.1.0
@@ -121,6 +121,7 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
+        logger.debug("Validating schema for v1.1.0")
         return self.schema_strategy.validate_schema(metadata, context)
         
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -133,6 +134,7 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
+        logger.debug("Validating dependencies for v1.1.0")
         return self.dependency_strategy.validate_dependencies(metadata, context)
         
     def validate_entry_point(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -145,6 +147,7 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
+        logger.debug("Validating entry point for v1.1.0")
         return self.entry_point_strategy.validate_entry_point(metadata, context)
         
     def validate_tools(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -157,4 +160,5 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
+        logger.debug("Validating tools for v1.1.0")
         return self.tools_strategy.validate_tools(metadata, context)

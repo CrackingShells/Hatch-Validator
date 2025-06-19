@@ -9,6 +9,9 @@ from typing import Dict, List, Tuple
 
 from .validation_context import ValidationContext
 
+class ValidationError(Exception):
+    """Custom exception for validation errors."""
+    pass
 
 class ValidationStrategy(ABC):
     """Base interface for all validation strategies.

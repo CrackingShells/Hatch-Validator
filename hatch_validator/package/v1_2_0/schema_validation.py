@@ -43,6 +43,8 @@ class SchemaValidation(SchemaValidationStrategy):
             return True, []
             
         except jsonschema.exceptions.ValidationError as e:
+            logger.error(f"Schema validation error: {e.message}")
             return False, [f"Schema validation error: {e.message}"]
         except Exception as e:
+            logger.error(f"Error during schema validation: {str(e)}")
             return False, [f"Error during schema validation: {str(e)}"]

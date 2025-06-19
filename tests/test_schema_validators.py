@@ -206,7 +206,6 @@ class TestValidationStrategies(unittest.TestCase):
 
 class TestValidatorFactory(unittest.TestCase):
     """Test cases for ValidatorFactory class."""
-    
     def test_factory_implementation(self):
         """Test that factory now works after Phase 2 implementation."""
         validator = ValidatorFactory.create_validator_chain()
@@ -214,6 +213,33 @@ class TestValidatorFactory(unittest.TestCase):
         
         validator_v1_1_0 = ValidatorFactory.create_validator_chain("1.1.0")
         self.assertIsNotNone(validator_v1_1_0)
+        
+        # Test v1.2.0 validator creation
+        validator_v1_2_0 = ValidatorFactory.create_validator_chain("1.2.0")
+        self.assertIsNotNone(validator_v1_2_0)
+    
+    def test_v1_2_0_validator_chain_delegation(self):
+        """Test that v1.2.0 validator properly delegates to v1.1.0."""
+        validator = ValidatorFactory.create_validator_chain("1.2.0")
+        context = ValidationContext()
+        
+        # Test v1.2.0 metadata
+        v1_2_0_metadata = {"package_schema_version": "1.2.0"}
+        is_valid, errors = validator.validate(v1_2_0_metadata, context)
+        self.assertIsInstance(is_valid, bool)
+        self.assertIsInstance(errors, list)
+        
+        # Test v1.1.0 metadata (should delegate)
+        v1_1_0_metadata = {"package_schema_version": "1.1.0"}
+        is_valid, errors = validator.validate(v1_1_0_metadata, context)
+        self.assertIsInstance(is_valid, bool)
+        self.assertIsInstance(errors, list)
+    
+    def test_supported_versions_includes_v1_2_0(self):
+        """Test that v1.2.0 is included in supported versions."""
+        supported_versions = ValidatorFactory.get_supported_versions()
+        self.assertIn("1.2.0", supported_versions)
+        self.assertIn("1.1.0", supported_versions)
 
 
 if __name__ == "__main__":

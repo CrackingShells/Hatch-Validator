@@ -28,7 +28,7 @@ class DependencyValidation(DependencyValidationStrategy):
     def __init__(self):
         """Initialize the dependency validation strategy."""
         self.version_validator = VersionConstraintValidator()
-        # Registry service will be initialized when used in validate_dependencies
+        self.registry_service = None
     
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate dependencies according to v1.1.0 schema using utility modules.
@@ -356,7 +356,8 @@ class DependencyValidation(DependencyValidationStrategy):
                             self._add_local_dependency_graph(local_dep, graph, context)
                             
             except Exception as e:
-                logger.warning(f"Could not load metadata for local dependency '{dep_name}': {e}")
+                logger.error(f"Could not load metadata for local dependency '{dep_name}': {e}")
+                raise 
     
     def _add_remote_dependency_graph(self, dep: Dict, graph: DependencyGraph, 
                                     context: ValidationContext, processed: Set[str] = None) -> None:
@@ -381,12 +382,12 @@ class DependencyValidation(DependencyValidationStrategy):
         processed.add(dep_name)
         try:
             # Use registry service if available
-            if not hasattr(self, 'registry_service') or not self.registry_service:
+            if not self.registry_service:
                 logger.warning(f"No registry service available for remote dependency '{dep_name}'")
                 return
             
             if not self.registry_service.is_loaded():
-                logger.warning(f"Registry service not loaded for remote dependency '{dep_name}'")
+                logger.error(f"Registry service not loaded for remote dependency '{dep_name}'")
                 return
             
             # Find compatible version using registry service

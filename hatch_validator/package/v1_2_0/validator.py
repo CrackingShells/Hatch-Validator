@@ -115,6 +115,7 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
+        logger.debug("Validating package metadata against v1.2.0 schema")
         return self.schema_strategy.validate_schema(metadata, context)
     
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
@@ -130,4 +131,5 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
+        logger.debug("Validating package dependencies for v1.2.0")
         return self.dependency_strategy.validate_dependencies(metadata, context)

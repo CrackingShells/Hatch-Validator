@@ -29,6 +29,26 @@ class DependencyGraph:
                 Maps package names to their direct dependencies. Defaults to None.
         """
         self.adjacency_list = adjacency_list or {}
+
+    def to_dict(self) -> Dict[str, List[str]]:
+        """Convert the graph to a dictionary representation.
+        
+        Returns:
+            Dict[str, List[str]]: Adjacency list representation of the graph.
+        """
+        return self.adjacency_list.copy()
+
+    def __str__(self) -> str:
+        """String representation of the dependency graph.
+        
+        Returns:
+            str: String representation of the adjacency list.
+        """
+        return str(self.to_dict())
+        
+    def __repr__(self) -> str:
+        """Official string representation for debugging."""
+        return f"{self.__class__.__name__}({self.to_dict()})"
         
     def add_dependency(self, package: str, dependency: str) -> None:
         """Add a dependency relationship to the graph.

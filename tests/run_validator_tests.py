@@ -53,9 +53,14 @@ def configure_parser():
         help="Run only schema validator framework tests"
     )
     test_type.add_argument(
-        "--v1-1-0-only",
+        "--validator_for_pkg_v1_1_0_only",
         action="store_true",
         help="Run only v1.1.0 validator implementation tests"
+    )
+    test_type.add_argument(
+        "--validator_for_pkg_v1_2_0_only",
+        action="store_true",
+        help="Run only v1.2.0 validator implementation tests"
     )
     test_type.add_argument(
         "--dependency-graph-only",
@@ -127,9 +132,12 @@ def run_tests(args):
     if args.schemas_only:
         logger.info("Running schema retriever integration tests only...")
         test_suite = test_loader.loadTestsFromName("test_schemas_retriever.TestSchemaRetrieverIntegration")
-    elif args.validator_only:
+    elif args.validator_for_pkg_v1_1_0_only:
         logger.info("Running package validator tests only...")
         test_suite = test_loader.loadTestsFromName("test_package_validator.TestHatchPackageValidator")
+    elif args.validator_for_pkg_v1_2_0_only:
+        logger.info("Running v1.2.0 validator implementation tests only...")
+        test_suite = test_loader.loadTestsFromName("test_package_validator_for_v1_2_0.TestHatchPackageValidator_v1_2_0")
     elif args.schema_validators_only:
         logger.info("Running schema validator framework tests only...")
         test_suite = test_loader.loadTestsFromName("test_schema_validators")
@@ -155,7 +163,8 @@ def run_tests(args):
             "test_schema_validators_v1_1_0",
             "test_dependency_graph",
             "test_version_utils",
-            "test_dependency_validation_v1_1_0"
+            "test_dependency_validation_v1_1_0",
+            "test_package_validator_for_v1_2_0"
         ]
         test_suite = unittest.TestSuite()
         for module_name in test_modules:
