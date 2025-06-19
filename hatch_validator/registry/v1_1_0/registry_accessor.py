@@ -1,5 +1,6 @@
 from typing import Dict, List, Any, Optional
 from hatch_validator.registry.registry_accessor_base import RegistryAccessorBase
+from hatch_validator.utils.version_utils import VersionConstraintValidator
 
 class RegistryAccessor(RegistryAccessorBase):
     """Registry accessor for schema version 1.1.0.
@@ -242,32 +243,17 @@ class RegistryAccessor(RegistryAccessorBase):
         Returns:
             Optional[str]: Compatible version string, or None if not found.
         """
-        from packaging import version, specifiers
-        
         versions = self.get_package_versions(registry_data, package_name)
         if not versions:
             return None
-        
+
         if not version_constraint:
             # Return latest version
             return versions[-1] if versions else None
-        
-        try:
-            spec = specifiers.SpecifierSet(version_constraint)
-            
-            # Filter compatible versions
-            compatible_versions = []
-            for v in versions:
-                if spec.contains(v):
-                    compatible_versions.append(v)
-            
-            # Return the latest compatible version
-            if compatible_versions:
-                # Sort versions and return the latest
-                compatible_versions.sort(key=lambda x: version.Version(x))
-                return compatible_versions[-1]
-            
-        except Exception:
-            pass
-        
-        return None
+
+        # Use VersionConstraintValidator to filter compatible versions (prefer highest)
+        compatible_versions = [
+            v for v in sorted(versions, key=lambda x: tuple(int(p) if p.isdigit() else p for p in x.split('.')), reverse=True)
+            if VersionConstraintValidator.is_version_compatible(v, version_constraint)[0]
+        ]
+        return compatible_versions[0] if compatible_versions else None
