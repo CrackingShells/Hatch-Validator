@@ -13,6 +13,10 @@ class ValidationContext:
     
     This context provides a consistent interface for passing validation resources
     and state between validators and strategies in the chain.
+
+    The context can hold default information such as the package directory,
+    registry data, and flags for local dependencies and schema updates. Additional
+    data can be stored and retrieved using the `set_data` and `get_data` methods.
     """
     
     def __init__(self, package_dir: Optional[Path] = None, registry_data: Optional[Dict] = None,

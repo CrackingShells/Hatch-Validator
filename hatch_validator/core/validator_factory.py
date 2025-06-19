@@ -7,7 +7,7 @@ validator chain based on the target schema version.
 from typing import Optional, List, Dict, Type
 import logging
 
-from .validator_base import SchemaValidator
+from .validator_base import Validator
 
 logger = logging.getLogger("hatch.validator_factory")
 
@@ -22,16 +22,16 @@ class ValidatorFactory:
     """
     
     # Registry of available validator versions (newest to oldest)
-    _validator_registry: Dict[str, Type[SchemaValidator]] = {}
+    _validator_registry: Dict[str, Type[Validator]] = {}
     _version_order: List[str] = []
     
     @classmethod
-    def register_validator(cls, version: str, validator_class: Type[SchemaValidator]) -> None:
+    def register_validator(cls, version: str, validator_class: Type[Validator]) -> None:
         """Register a validator class for a specific schema version.
         
         Args:
             version (str): Schema version (e.g., "1.1.0", "1.2.0")
-            validator_class (Type[SchemaValidator]): Validator class for the version
+            validator_class (Type[Validator]): Validator class for the version
         """
         cls._validator_registry[version] = validator_class
         if version not in cls._version_order:
@@ -56,20 +56,20 @@ class ValidatorFactory:
         if not cls._validator_registry:
             # Import and register available validators
             try:
-                from hatch_validator.schemas.v1_1_0.schema_validators import SchemaValidator as V110Validator
+                from hatch_validator.schemas.v1_1_0.schema_validators import Validator as V110Validator
                 cls.register_validator("1.1.0", V110Validator)
             except ImportError as e:
                 logger.warning(f"Could not load v1.1.0 validator: {e}")
             
             # Future versions can be added here:
             # try:
-            #     from hatch_validator.schemas.v1_2_0.schema_validators import SchemaValidator as V120Validator
+            #     from hatch_validator.schemas.v1_2_0.schema_validators import Validator as V120Validator
             #     cls.register_validator("1.2.0", V120Validator)
             # except ImportError as e:
             #     logger.warning(f"Could not load v1.2.0 validator: {e}")
     
     @classmethod
-    def create_validator_chain(cls, target_version: Optional[str] = None) -> SchemaValidator:
+    def create_validator_chain(cls, target_version: Optional[str] = None) -> Validator:
         """Create appropriate validator chain based on target version.
         
         Creates a chain of validators ordered from newest to oldest schema versions.
@@ -81,7 +81,7 @@ class ValidatorFactory:
                 If None, uses the latest available version. Defaults to None.
             
         Returns:
-            SchemaValidator: Head of the validator chain
+            Validator: Head of the validator chain
             
         Raises:
             ValueError: If the target version is not supported or no validators are available

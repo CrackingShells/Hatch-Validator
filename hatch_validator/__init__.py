@@ -8,7 +8,7 @@ __version__ = "0.3.2"
 
 # Core validation framework
 from .core.validation_context import ValidationContext
-from .core.validator_base import SchemaValidator
+from .core.validator_base import Validator
 from .core.validation_strategy import (
     ValidationStrategy,
     DependencyValidationStrategy,
@@ -39,7 +39,7 @@ from .registry.v1_1_0.registry_accessor import RegistryAccessor as V110RegistryA
 __all__ = [
     # Core validation framework
     'ValidationContext',
-    'SchemaValidator',
+    'Validator',
     'ValidationStrategy',
     'DependencyValidationStrategy',
     'ToolsValidationStrategy',
