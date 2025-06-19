@@ -10,6 +10,7 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from .registry_accessor_factory import RegistryAccessorFactory
 from .registry_accessor_base import RegistryAccessorBase, RegistryError
+from hatch_validator.utils.version_utils import VersionConstraintValidator
 
 logger = logging.getLogger("hatch.registry_service")
 
@@ -199,7 +200,16 @@ class RegistryService:
         else:
             # Fallback for accessors without this method
             versions = self.get_package_versions(package_name)
-            return versions[-1] if versions else None
+            if not versions:
+                return None
+            if not version_constraint:
+                return versions[-1]
+            # Use VersionConstraintValidator to find a compatible version (prefer highest)
+            compatible_versions = [
+                v for v in sorted(versions, key=lambda x: tuple(int(p) if p.isdigit() else p for p in x.split('.')), reverse=True)
+                if VersionConstraintValidator.is_version_compatible(v, version_constraint)[0]
+            ]
+            return compatible_versions[0] if compatible_versions else None
     
     # Validation methods
     
@@ -279,17 +289,13 @@ class RegistryService:
             if not versions:
                 return False, f"Package '{package_name}' not found in registry"
             
-            # Create a specifier set from the constraint
-            spec_set = specifiers.SpecifierSet(version_constraint)
-            
-            # Check if any available version satisfies the constraint
-            compatible_versions = [v for v in versions if spec_set.contains(v)]
-            
-            if compatible_versions:
-                return True, None
-            else:
-                available_versions = ', '.join(versions)
-                return False, f"No version of '{package_name}' satisfies constraint {version_constraint}. Available versions: {available_versions}"
+            # Use VersionConstraintValidator from utils
+            for v in versions:
+                is_compatible, error = VersionConstraintValidator.is_version_compatible(v, version_constraint)
+                if is_compatible:
+                    return True, None
+            available_versions = ', '.join(versions)
+            return False, f"No version of '{package_name}' satisfies constraint {version_constraint}. Available versions: {available_versions}"
                 
         except Exception as e:
             return False, f"Error checking version compatibility: {e}"
@@ -402,6 +408,9 @@ class RegistryService:
         Raises:
             RegistryError: If registry data is not loaded.
         """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        return self._accessor.get_schema_version(self._registry_data)
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
         return self._accessor.get_schema_version(self._registry_data)
