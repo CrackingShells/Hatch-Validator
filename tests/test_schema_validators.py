@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hatch_validator.core.validation_context import ValidationContext
-from hatch_validator.core.validator_base import SchemaValidator
+from hatch_validator.core.validator_base import Validator
 from hatch_validator.core.validation_strategy import (
     DependencyValidationStrategy,
     ToolsValidationStrategy,
@@ -23,8 +23,8 @@ from hatch_validator.core.validation_strategy import (
 from hatch_validator.core.validator_factory import ValidatorFactory
 
 
-class ConcreteSchemaValidator(SchemaValidator):
-    """Concrete implementation of SchemaValidator for testing."""
+class ConcreteValidator(Validator):
+    """Concrete implementation of Validator for testing."""
     
     def __init__(self, supported_version: str, next_validator=None):
         """Initialize test validator.
@@ -109,12 +109,12 @@ class TestValidationContext(unittest.TestCase):
 
 
 class TestSchemaValidator(unittest.TestCase):
-    """Test cases for SchemaValidator abstract base class."""
+    """Test cases for Validator abstract base class."""
     
     def test_chain_construction(self):
         """Test that validator chain can be constructed properly."""
-        validator1 = ConcreteSchemaValidator("1.1.0")
-        validator2 = ConcreteSchemaValidator("1.0.0")
+        validator1 = ConcreteValidator("1.1.0")
+        validator2 = ConcreteValidator("1.0.0")
         
         validator1.set_next(validator2)
         
@@ -123,7 +123,7 @@ class TestSchemaValidator(unittest.TestCase):
     
     def test_can_handle_functionality(self):
         """Test the can_handle method functionality."""
-        validator = ConcreteSchemaValidator("1.1.0")
+        validator = ConcreteValidator("1.1.0")
         
         self.assertTrue(validator.can_handle("1.1.0"))
         self.assertFalse(validator.can_handle("1.2.0"))
@@ -131,8 +131,8 @@ class TestSchemaValidator(unittest.TestCase):
     
     def test_validation_delegation(self):
         """Test that validation is properly delegated in the chain."""
-        validator1 = ConcreteSchemaValidator("1.2.0")
-        validator2 = ConcreteSchemaValidator("1.1.0")
+        validator1 = ConcreteValidator("1.2.0")
+        validator2 = ConcreteValidator("1.1.0")
         validator1.set_next(validator2)
         
         context = ValidationContext()
@@ -148,7 +148,7 @@ class TestSchemaValidator(unittest.TestCase):
     
     def test_validation_without_delegation(self):
         """Test validation when validator can handle the version directly."""
-        validator = ConcreteSchemaValidator("1.1.0")
+        validator = ConcreteValidator("1.1.0")
         context = ValidationContext()
         metadata = {"package_schema_version": "1.1.0"}
         
@@ -160,7 +160,7 @@ class TestSchemaValidator(unittest.TestCase):
     
     def test_validation_failure_no_handler(self):
         """Test validation failure when no validator in chain can handle version."""
-        validator = ConcreteSchemaValidator("1.1.0")
+        validator = ConcreteValidator("1.1.0")
         context = ValidationContext()
         metadata = {"package_schema_version": "2.0.0"}
         
@@ -189,7 +189,7 @@ class TestValidationStrategies(unittest.TestCase):
     def test_cannot_instantiate_abstract_classes(self):
         """Test that abstract base classes cannot be instantiated directly."""
         with self.assertRaises(TypeError):
-            SchemaValidator()
+            Validator()
         
         with self.assertRaises(TypeError):
             DependencyValidationStrategy()

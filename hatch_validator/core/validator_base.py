@@ -10,21 +10,21 @@ from typing import Dict, List, Tuple, Optional
 from .validation_context import ValidationContext
 
 
-class SchemaValidator(ABC):
-    """Abstract base class for schema validators in the Chain of Responsibility pattern.
+class Validator(ABC):
+    """Abstract base class for validators in the Chain of Responsibility pattern.
     
-    Each validator in the chain can either handle the validation for a specific schema
+    Each validator in the chain can either handle the validation for a specific
     version or pass the request to the next validator in the chain. The base class
     provides default delegation methods for each specific validation concern,
     allowing concrete validators to override only the validation concerns that
     have changed in their version.
     """
     
-    def __init__(self, next_validator: Optional['SchemaValidator'] = None):
+    def __init__(self, next_validator: Optional['Validator'] = None):
         """Initialize the validator with an optional next validator in the chain.
         
         Args:
-            next_validator (SchemaValidator, optional): Next validator in the chain. Defaults to None.
+            next_validator (Validator, optional): Next validator in the chain. Defaults to None.
         """
         self.next_validator = next_validator
     
@@ -55,14 +55,14 @@ class SchemaValidator(ABC):
         """
         pass
     
-    def set_next(self, validator: 'SchemaValidator') -> 'SchemaValidator':
+    def set_next(self, validator: 'Validator') -> 'Validator':
         """Set the next validator in the chain.
         
         Args:
-            validator (SchemaValidator): Next validator to set
+            validator (Validator): Next validator to set
             
         Returns:
-            SchemaValidator: The validator that was set as next
+            Validator: The validator that was set as next
         """
         self.next_validator = validator
         return validator
