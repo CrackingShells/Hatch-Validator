@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hatch-validator"
-version = "0.5.0"
+version = "0.5.1"
 authors = [
   { name = "Hatch Team" },
 ]
@@ -24,4 +24,6 @@ dependencies = [
 
 [tool.setuptools]
 package-dir = {"" = "."}
-packages = ["hatch_validator"]
+
+[tool.setuptools.packages.find]
+where = ["."]
