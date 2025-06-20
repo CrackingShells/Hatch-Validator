@@ -33,79 +33,73 @@ class RegistryAccessor(RegistryAccessorBase):
         return registry_data.get('registry_schema_version', 'unknown')
     
     def get_all_package_names(self, registry_data: Dict[str, Any]) -> List[str]:
-        """Get all package names from registry data.
-        
+        """Get all package names from all repositories in the registry data.
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
-            
         Returns:
             List[str]: List of package names.
         """
         package_names = []
-        repositories = registry_data.get('repositories', [])
-        
-        for repo in repositories:
-            packages = repo.get('packages', [])
-            for package in packages:
-                package_name = package.get('name')
-                if package_name and package_name not in package_names:
-                    package_names.append(package_name)
-        
+        for repo in registry_data.get('repositories', []):
+            for package in repo.get('packages', []):
+                name = package.get('name')
+                if name:
+                    package_names.append(name)
         return package_names
-    
-    def package_exists(self, registry_data: Dict[str, Any], package_name: str) -> bool:
-        """Check if a package exists in the registry.
-        
+
+    def package_exists(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> bool:
+        """Check if a package exists in the registry, optionally in a specific repo.
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name to check.
-            
+            repo_name (str, optional): Repository name. If None, search all repos.
         Returns:
             bool: True if package exists.
         """
+        if repo_name:
+            return package_name in self.list_packages(registry_data, repo_name)
         return package_name in self.get_all_package_names(registry_data)
-    
-    def get_package_versions(self, registry_data: Dict[str, Any], package_name: str) -> List[str]:
-        """Get all versions for a package.
-        
+
+    def get_package_versions(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> List[str]:
+        """Get all versions for a package, optionally in a specific repo.
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name.
-            
+            repo_name (str, optional): Repository name. If None, search all repos.
         Returns:
             List[str]: List of version strings.
         """
-        repositories = registry_data.get('repositories', [])
-        
-        for repo in repositories:
-            packages = repo.get('packages', [])
-            for package in packages:
-                if package.get('name') == package_name:
-                    versions = package.get('versions', [])
-                    return [v.get('version') for v in versions if v.get('version')]
-        
+        repos = registry_data.get('repositories', [])
+        for repo in repos:
+            if repo_name and repo.get('name') != repo_name:
+                continue
+            for pkg in repo.get('packages', []):
+                if pkg.get('name') == package_name:
+                    return [ver.get('version') for ver in pkg.get('versions', []) if ver.get('version')]
         return []
-    
-    def get_package_metadata(self, registry_data: Dict[str, Any], package_name: str) -> Dict[str, Any]:
-        """Get metadata for a package.
-        
+
+    def get_package_metadata(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get metadata for a package, optionally in a specific repo.
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name.
-            
+            repo_name (str, optional): Repository name. If None, search all repos.
         Returns:
             Dict[str, Any]: Package metadata.
         """
-        repositories = registry_data.get('repositories', [])
-        
-        for repo in repositories:
-            packages = repo.get('packages', [])
-            for package in packages:
-                if package.get('name') == package_name:
-                    return package
-        
+        repos = registry_data.get('repositories', [])
+        for repo in repos:
+            if repo_name and repo.get('name') != repo_name:
+                continue
+            for pkg in repo.get('packages', []):
+                if pkg.get('name') == package_name:
+                    return pkg
         return {}
-    
+
     def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None) -> Dict[str, Any]:
         """Get reconstructed dependencies for a specific package version.
         
@@ -257,3 +251,58 @@ class RegistryAccessor(RegistryAccessorBase):
             if VersionConstraintValidator.is_version_compatible(v, version_constraint)[0]
         ]
         return compatible_versions[0] if compatible_versions else None
+
+    def get_package_by_repo(self, registry_data: Dict[str, Any], repo_name: str, package_name: str) -> Optional[Dict[str, Any]]:
+        """Get a package by repository and package name.
+
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            repo_name (str): Repository name.
+            package_name (str): Package name.
+        Returns:
+            Optional[Dict[str, Any]]: Package metadata or None if not found.
+        """
+        for repo in registry_data.get('repositories', []):
+            if repo.get('name') == repo_name:
+                for pkg in repo.get('packages', []):
+                    if pkg.get('name') == package_name:
+                        return pkg
+        return None
+
+    def list_repositories(self, registry_data: Dict[str, Any]) -> List[str]:
+        """List all repository names in the registry.
+
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+        
+        Returns:
+            List[str]: List of repository names.
+        """
+        return [repo.get('name') for repo in registry_data.get('repositories', [])]
+
+    def repository_exists(self, registry_data: Dict[str, Any], repo_name: str) -> bool:
+        """Check if a repository exists in the registry.
+
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            repo_name (str): Repository name.
+        
+        Returns:
+            bool: True if repository exists.
+        """
+        return any(repo.get('name') == repo_name for repo in registry_data.get('repositories', []))
+
+    def list_packages(self, registry_data: Dict[str, Any], repo_name: str) -> List[str]:
+        """List all package names in a given repository.
+
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            repo_name (str): Repository name.
+        
+        Returns:
+            List[str]: List of package names in the repository.
+        """
+        for repo in registry_data.get('repositories', []):
+            if repo.get('name') == repo_name:
+                return [pkg.get('name') for pkg in repo.get('packages', [])]
+        return []

@@ -414,6 +414,58 @@ class RegistryService:
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
         return self._accessor.get_schema_version(self._registry_data)
+    
+    def list_repositories(self) -> List[str]:
+        """List all repository names in the loaded registry.
+
+        Returns:
+            List[str]: List of repository names.
+        Raises:
+            RegistryError: If registry data is not loaded.
+        """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
-        return self._accessor.get_schema_version(self._registry_data)
+        return self._accessor.list_repositories(self._registry_data)
+
+    def repository_exists(self, repo_name: str) -> bool:
+        """Check if a repository exists in the loaded registry.
+
+        Args:
+            repo_name (str): Repository name.
+        Returns:
+            bool: True if repository exists.
+        Raises:
+            RegistryError: If registry data is not loaded.
+        """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        return self._accessor.repository_exists(self._registry_data, repo_name)
+
+    def list_packages(self, repo_name: str) -> List[str]:
+        """List all package names in a given repository.
+
+        Args:
+            repo_name (str): Repository name.
+        Returns:
+            List[str]: List of package names in the repository.
+        Raises:
+            RegistryError: If registry data is not loaded.
+        """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        return self._accessor.list_packages(self._registry_data, repo_name)
+
+    def get_package_by_repo(self, repo_name: str, package_name: str) -> Optional[Dict[str, Any]]:
+        """Get a package by repository and package name.
+
+        Args:
+            repo_name (str): Repository name.
+            package_name (str): Package name.
+        Returns:
+            Optional[Dict[str, Any]]: Package metadata or None if not found.
+        Raises:
+            RegistryError: If registry data is not loaded.
+        """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        return self._accessor.get_package_by_repo(self._registry_data, repo_name, package_name)
