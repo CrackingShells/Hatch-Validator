@@ -24,4 +24,6 @@ dependencies = [
 
 [tool.setuptools]
 package-dir = {"" = "."}
-packages = ["hatch_validator"]
+
+[tool.setuptools.packages.find]
+where = ["."]
