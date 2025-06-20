@@ -141,9 +141,6 @@ def run_tests(args):
     elif args.schema_validators_only:
         logger.info("Running schema validator framework tests only...")
         test_suite = test_loader.loadTestsFromName("test_schema_validators")
-    elif args.v1_1_0_only:
-        logger.info("Running v1.1.0 validator implementation tests only...")
-        test_suite = test_loader.loadTestsFromName("test_schema_validators_v1_1_0")
     elif args.dependency_graph_only:
         logger.info("Running dependency graph utility tests only...")
         test_suite = test_loader.loadTestsFromName("test_dependency_graph.TestDependencyGraph")

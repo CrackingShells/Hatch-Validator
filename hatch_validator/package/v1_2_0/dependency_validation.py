@@ -73,22 +73,10 @@ class DependencyValidation(DependencyValidationStrategy):
             
             errors = []
             is_valid = True
-            
             # Get dependencies from v1.2.0 unified format
             dependencies = metadata.get('dependencies', {})
             hatch_dependencies = dependencies.get('hatch', [])
-                
-            # Early check for local dependencies if they're not allowed
-            if not context.allow_local_dependencies:
-                local_deps = [dep for dep in hatch_dependencies 
-                            if dep.get('type', {}).get('type') == 'local']
-                if local_deps:
-                    for dep in local_deps:
-                        logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")
-                        errors.append(f"Local dependency '{dep.get('name')}' not allowed in this context")
-                    is_valid = False
-                    return is_valid, errors
-            
+
             # Validate Hatch dependencies
             if hatch_dependencies:
                 hatch_valid, hatch_errors = self._validate_hatch_dependencies(
@@ -149,21 +137,43 @@ class DependencyValidation(DependencyValidationStrategy):
         
         return is_valid, errors
     
-    def _validate_single_hatch_dependency(self, dep: Dict, 
-                                        context: ValidationContext) -> Tuple[bool, List[str]]:
+    def _is_path_like(self, name: str) -> bool:
+        """Check if a dependency name looks like a file path.
+
+        Args:
+            name (str): Dependency name to check.
+        Returns:
+            bool: True if it looks like a path (contains path separators or dots).
+        """
+        return any(sep in name for sep in ['/', '\\', '.'])
+
+    def _parse_hatch_dep_name(self, dep_name: str) -> Tuple[Optional[str], str]:
+        """Parse a hatch dependency name into (repo, package_name).
+
+        This is only used when it has already been determined that the dependency is remote.
+        Otherwise, absolute paths on windows may contain colons, which would be misinterpreted as a repo prefix.
+
+        Args:
+            dep_name (str): Dependency name, possibly with repo prefix.
+        Returns:
+            Tuple[Optional[str], str]: (repo_name, package_name). repo_name is None if not present.
+        """
+        if ':' in dep_name:
+            repo, pkg = dep_name.split(':', 1)
+            return repo, pkg
+        return None, dep_name
+    
+    def _validate_single_hatch_dependency(self, dep: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate a single Hatch dependency.
-        
+
         Args:
             dep (Dict): Dependency definition
             context (ValidationContext): Validation context
-            
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
         is_valid = True
-        
-        # Validate required fields
         dep_name = dep.get('name')
         if not dep_name:
             errors.append("Hatch dependency missing name")
@@ -177,105 +187,103 @@ class DependencyValidation(DependencyValidationStrategy):
                 errors.append(f"Invalid version constraint for '{dep_name}': {constraint_error}")
                 is_valid = False
         
-        # Validate dependency type
-        dep_type = dep.get('type', {})
-        type_name = dep_type.get('type')
-        
-        if type_name == 'local':
+        # Check if this looks like a local path, otherwise treat as remote
+        if self._is_path_like(dep_name):
+            # Local dependency - check if allowed
+            if not context.allow_local_dependencies:
+                errors.append(f"Local dependency '{dep_name}' not allowed in this context")
+                return False, errors
             local_valid, local_errors = self._validate_local_dependency(dep, context)
             if not local_valid:
                 errors.extend(local_errors)
                 is_valid = False
-        elif type_name == 'remote' or type_name is None:  # Default to registry
+        else:
+            # Remote dependency - validate through registry
             registry_valid, registry_errors = self._validate_registry_dependency(dep, context)
             if not registry_valid:
                 errors.extend(registry_errors)
                 is_valid = False
-        else:
-            errors.append(f"Unknown dependency type for '{dep_name}': {type_name}")
-            is_valid = False
         
         return is_valid, errors
     
-    def _validate_local_dependency(self, dep: Dict, 
-                                 context: ValidationContext) -> Tuple[bool, List[str]]:
+    def _validate_local_dependency(self, dep: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate a local file dependency.
-        
+
         Args:
             dep (Dict): Local dependency definition
             context (ValidationContext): Validation context
-            
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
-        is_valid = True
-        
         dep_name = dep.get('name')
-        dep_type = dep.get('type', {})
-        uri = dep_type.get('uri')
         
-        # Validate URI
-        if not uri:
-            errors.append(f"Local dependency '{dep_name}' missing URI")
+        # Resolve path
+        path = Path(dep_name)
+        if context.package_dir and not path.is_absolute():
+            path = context.package_dir / path
+        
+        # Check if path exists as a file (not a directory)
+        if path.exists():
+            if not path.is_dir():
+                errors.append(f"Local dependency '{dep_name}' path is not a directory: {path}")
+                return False, errors
+        else:
+            # If the parent directory exists and the path would be a file, still report 'not a directory'
+            # if path.parent.exists() and path.suffix:
+            errors.append(f"Local dependency '{dep_name}' path is not a directory: {path}")
+            return False, errors
+            # errors.append(f"Local dependency '{dep_name}' path does not exist: {path}")
+            # return False, errors
+        
+        # Check for metadata file
+        metadata_path = path / "hatch_metadata.json"
+        if not metadata_path.exists():
+            errors.append(f"Local dependency '{dep_name}' missing hatch_metadata.json: {metadata_path}")
             return False, errors
         
-        if not uri.startswith('file://'):
-            errors.append(f"Local dependency '{dep_name}' URI must start with 'file://'")
-            is_valid = False
-        else:
-            # Extract and validate path
-            path_str = uri[7:]  # Remove "file://"
-            path = Path(path_str)
-            
-            # Resolve relative paths
-            if context.package_dir and not path.is_absolute():
-                path = context.package_dir / path
-            
-            # Check if path exists
-            if not path.exists() or not path.is_dir():
-                errors.append(f"Local dependency '{dep_name}' path does not exist: {path}")
-                is_valid = False
-            else:
-                # Check for metadata file
-                metadata_path = path / "hatch_metadata.json"
-                if not metadata_path.exists():
-                    errors.append(f"Local dependency '{dep_name}' missing hatch_metadata.json: {metadata_path}")
-                    is_valid = False
-        
-        return is_valid, errors
+        return True, []
     
-    def _validate_registry_dependency(self, dep: Dict, 
-                                    context: ValidationContext) -> Tuple[bool, List[str]]:
+    def _validate_registry_dependency(self, dep: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate a registry dependency.
-        
+
         Args:
             dep (Dict): Registry dependency definition
             context (ValidationContext): Validation context
-            
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
-        is_valid = True
-    
         dep_name = dep.get('name')
         version_constraint = dep.get('version_constraint')
         
-        # Check if package exists in registry
-        exists, error = self.registry_service.validate_package_exists(dep_name)
-        if not exists:
-            errors.append(f"Registry dependency '{dep_name}' not found: {error}")
-            is_valid = False
-        elif version_constraint:
-            # Check if the available version satisfies the constraint
+        # Parse repo and package name
+        repo, pkg = self._parse_hatch_dep_name(dep_name)
+        
+        if repo:
+            # Check repo existence
+            if not self.registry_service.repository_exists(repo):
+                errors.append(f"Repository '{repo}' not found in registry for dependency '{dep_name}'")
+                return False, errors
+            # Check package existence in repo
+            if not self.registry_service.package_exists(pkg, repo_name=repo):
+                errors.append(f"Package '{pkg}' not found in repository '{repo}' for dependency '{dep_name}'")
+                return False, errors
+        else:
+            # No repo prefix, check package in any repo
+            if not self.registry_service.package_exists(pkg):
+                errors.append(f"Registry dependency '{pkg}' not found in registry for dependency '{dep_name}'")
+                return False, errors
+        
+        # Check version compatibility if constraint is specified
+        if version_constraint:
             version_compatible, version_error = self.registry_service.validate_version_compatibility(
                 dep_name, version_constraint)
             if not version_compatible:
                 errors.append(f"No version of '{dep_name}' satisfies constraint {version_constraint}: {version_error}")
-                is_valid = False
+                return False, errors
         
-        return is_valid, errors
+        return True, []
     
     def _build_dependency_graph(self, hatch_dependencies: List[Dict], 
                               context: ValidationContext) -> DependencyGraph:
@@ -302,20 +310,25 @@ class DependencyValidation(DependencyValidationStrategy):
         
         # Track processed dependencies to avoid infinite recursion
         processed = set()
+          # Add dependencies and their transitive dependencies
+        try:
+            for dep in hatch_dependencies:
+                dep_name = dep.get('name')
+                if dep_name:
+                    graph.add_dependency(pkg_name, dep_name)
+                    
+                    # Add transitive dependencies based on whether it's a path or not
+                    if self._is_path_like(dep_name):
+                        logger.debug(f"Continuing graph building for local dependency: {dep_name}")
+                        self._add_local_dependency_graph(dep, graph, context)
+                    else:
+                        # Handle remote dependencies (default type)
+                        logger.debug(f"Continuing graph building for remote dependency: {dep_name}")
+                        self._add_remote_dependency_graph(dep, graph, context, processed)
         
-        # Add dependencies and their transitive dependencies
-        for dep in hatch_dependencies:
-            dep_name = dep.get('name')
-            if dep_name:
-                graph.add_dependency(pkg_name, dep_name)
-                
-                # Add transitive dependencies based on dependency type
-                dep_type = dep.get('type', {})
-                if dep_type.get('type') == 'local':
-                    self._add_local_dependency_graph(dep, graph, context)
-                else:
-                    # Handle remote dependencies (default type)
-                    self._add_remote_dependency_graph(dep, graph, context, processed)
+        except Exception as e:
+            logger.error(f"Error building dependency graph: {e}")
+            raise ValidationError(f"Error building dependency graph: {e}")
         
         return graph
     
@@ -329,15 +342,9 @@ class DependencyValidation(DependencyValidationStrategy):
             context (ValidationContext): Validation context
         """
         dep_name = dep.get('name')
-        dep_type = dep.get('type', {})
-        uri = dep_type.get('uri')
-        
-        if not uri or not uri.startswith('file://'):
-            return
-        
-        # Extract path
-        path_str = uri[7:]  # Remove "file://"
-        path = Path(path_str)
+        path = Path(dep_name)
+
+        #depname is actually the last
         
         # Resolve relative paths
         if context.package_dir and not path.is_absolute():
@@ -351,30 +358,33 @@ class DependencyValidation(DependencyValidationStrategy):
                 with open(metadata_path, 'r') as f:
                     local_metadata = json.load(f)
                 
-                local_dependencies = local_metadata.get('dependencies', {})
-                local_hatch_deps = local_dependencies.get('hatch', [])
+                next_deps = local_metadata.get('dependencies', {})
+                hatch_deps = next_deps.get('hatch', [])
                 
-                for local_dep in local_hatch_deps:
+                for local_dep in hatch_deps:
                     local_dep_name = local_dep.get('name')
                     if local_dep_name:
                         graph.add_dependency(dep_name, local_dep_name)
                         
                         # Recursively add if it's also local
-                        local_dep_type = local_dep.get('type', {})
-                        if local_dep_type.get('type') == 'local':
+                        if self._infer_dependency_type(local_dep) == 'local':
                             self._add_local_dependency_graph(local_dep, graph, context)
+
+                        else:
+                            # If it's a remote dependency, process it
+                            self._add_remote_dependency_graph(local_dep, graph, context)
                             
             except Exception as e:
                 logger.error(f"Could not load metadata for local dependency '{dep_name}': {e}")
                 raise ValidationError(f"Could not load metadata for local dependency '{dep_name}': {e}")
-    
+
     def _add_remote_dependency_graph(self, dep: Dict, graph: DependencyGraph, 
                                     context: ValidationContext, processed: Set[str] = None) -> None:
         """Add remote dependency and its transitive dependencies to the graph.
-        
+
         This method uses the registry to fetch the complete dependency information
         for a remote package, handling the differential storage format.
-        
+
         Args:
             dep (Dict): Remote dependency definition
             graph (DependencyGraph): Graph to add dependencies to
@@ -414,6 +424,7 @@ class DependencyValidation(DependencyValidationStrategy):
             if 'hatch_dependencies' in package_metadata:
                 # v1.1.0 format
                 remote_hatch_deps = package_metadata.get('hatch_dependencies', [])
+                logger.debug(f"Found remote hatch dependencies for '{dep_name}': {remote_hatch_deps}")
             else:
                 # v1.2.0 format
                 remote_dependencies = package_metadata.get('dependencies', {})

@@ -20,7 +20,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("hatch.validator_tests_v1_2_0")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
@@ -67,16 +67,15 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
         
         # Known packages in Hatch-Dev
         pkg_dirs = [
-            "arithmetic_pkg", 
             "base_pkg_1_4_0", 
             "base_pkg_2_1_1_0", 
-            "python_dep_pkg",
+            "python_dep_pkg_1_1_0",
             "circular_dep_pkg_1_1_1_0",
             "circular_dep_pkg_2_2_0_0",
-            "complex_dep_pkg",
-            "simple_dep_pkg",
-            "missing_dep_pkg",
-            "version_dep_pkg",
+            "complex_dep_pkg_1_1_0",
+            "simple_dep_pkg_1_1_0",
+            "missing_dep_pkg_1_1_0",
+            "version_dep_pkg_1_1_0",
             "system_dep_pkg",
             "docker_dep_pkg"
         ]
@@ -90,7 +89,8 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
                     try:
                         with open(metadata_path, 'r') as f:
                             metadata = json.load(f)
-                            
+                            deps = metadata.get("dependencies", {})
+
                             # Create a package entry with version information
                             pkg_entry = {
                                 "name": metadata.get("name", pkg_name),
@@ -108,21 +108,8 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
                                         },
                                         "added_date": datetime.now().isoformat(),
                                         # Add dependencies as differential changes
-                                        "hatch_dependencies_added": [
-                                            {
-                                                "name": dep["name"],
-                                                "version_constraint": dep.get("version_constraint", "")
-                                            }
-                                            for dep in metadata.get("hatch_dependencies", [])
-                                        ],
-                                        "python_dependencies_added": [
-                                            {
-                                                "name": dep["name"],
-                                                "version_constraint": dep.get("version_constraint", ""),
-                                                "package_manager": dep.get("package_manager", "pip")
-                                            }
-                                            for dep in metadata.get("python_dependencies", [])
-                                        ],
+                                        "hatch_dependencies_added": deps.get("hatch", []),
+                                        "python_dependencies_added": deps.get("python", []),
                                     }
                                 ]
                             }
@@ -150,11 +137,13 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
     def test_valid_package_with_dependencies(self):
         """Test validating a package with valid dependencies (simple_dep_pkg_1_1_0)."""
         pkg_path = self.hatch_dev_path / "simple_dep_pkg_1_1_0"
-        is_valid, results = self.validator.validate_package(pkg_path)
+        with open(pkg_path / "hatch_metadata.json", 'r') as f:
+            metadata = json.load(f)
+            is_valid, results = self.validator.validate_package(pkg_path, pending_update=(metadata.get("name"), metadata))
         
-        self.assertTrue(is_valid, f"Package validation failed for simple_dep_pkg_1_1_0. Errors: {results}")
-        self.assertTrue(results["valid"], f"Overall validation result should be valid for simple_dep_pkg_1_1_0")
-        self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for simple_dep_pkg_1_1_0: {results.get('dependencies', {}).get('errors')}")
+            self.assertTrue(is_valid, f"Package validation failed for simple_dep_pkg_1_1_0. Errors: {results}")
+            self.assertTrue(results["valid"], f"Overall validation result should be valid for simple_dep_pkg_1_1_0")
+            self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for simple_dep_pkg_1_1_0: {results.get('dependencies', {}).get('errors')}")
     
     def test_missing_dependency(self):
         """Test validating a package with missing dependencies (missing_dep_pkg_1_1_0)."""
@@ -372,6 +361,33 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
         self.assertTrue(is_valid, f"Package validation failed for version_dep_pkg_1_1_0. Errors: {results}")
         self.assertTrue(results["valid"], f"Overall validation result should be valid for version_dep_pkg_1_1_0")
         self.assertTrue(results["dependencies"]["valid"], f"Dependency validation failed: {results.get('dependencies', {}).get('errors')}")
+
+    def test_valid_local_path_dep_pkg(self):
+        """Test validating a v1.2.0 package with a valid local path dependency (local_path_dep_pkg)."""
+        pkg_path = self.hatch_dev_path / "local_path_dep_pkg"
+        is_valid, results = self.validator.validate_package(pkg_path)
+
+        self.assertTrue(is_valid, f"Package validation failed for local_path_dep_pkg. Errors: {results}")
+        self.assertTrue(results["valid"], f"Overall validation result should be valid for local_path_dep_pkg")
+        self.assertTrue(results["dependencies"]["valid"], f"Dependency validation failed: {results.get('dependencies', {}).get('errors')}")
+
+    def test_nonexistent_repo_dep_pkg(self):
+        """Test validating a v1.2.0 package with a dependency on a non-existent repository prefix (nonexistent_repo_dep_pkg)."""
+        pkg_path = self.hatch_dev_path / "nonexistent_repo_dep_pkg"
+        is_valid, results = self.validator.validate_package(pkg_path)
+        self.assertFalse(is_valid, f"Package validation should fail for nonexistent_repo_dep_pkg.")
+        self.assertFalse(results["valid"], f"Overall validation result should be invalid for nonexistent_repo_dep_pkg")
+        self.assertFalse(results["dependencies"]["valid"], f"Dependency validation should fail for nonexistent_repo_dep_pkg")
+        self.assertTrue(any("Repository" in err for err in results["dependencies"].get("errors", [])), "Error should mention missing repository.")
+
+    def test_file_path_dep_pkg(self):
+        """Test validating a v1.2.0 package with a local dependency that is a file, not a directory (file_path_dep_pkg)."""
+        pkg_path = self.hatch_dev_path / "file_path_dep_pkg"
+        is_valid, results = self.validator.validate_package(pkg_path)
+        self.assertFalse(is_valid, f"Package validation should fail for file_path_dep_pkg.")
+        self.assertFalse(results["valid"], f"Overall validation result should be invalid for file_path_dep_pkg")
+        self.assertFalse(results["dependencies"]["valid"], f"Dependency validation should fail for file_path_dep_pkg")
+        self.assertTrue(any("not a directory" in err.lower() for err in results["dependencies"].get("errors", [])), "Error should mention not a directory.")
         
 if __name__ == "__main__":
     unittest.main()
