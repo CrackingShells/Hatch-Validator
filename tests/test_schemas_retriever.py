@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from hatch_validator.schemas_retriever import get_package_schema, get_registry_schema
+from hatch_validator.schemas.schemas_retriever import get_package_schema, get_registry_schema
 
 class TestSchemaRetrieverIntegration(unittest.TestCase):
     """Integration tests for schemas_retriever with real network calls."""

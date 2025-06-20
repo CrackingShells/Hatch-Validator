@@ -15,8 +15,8 @@ import requests
 logger = logging.getLogger("hatch.schema_fetcher")
 
 # Configuration
-GITHUB_API_BASE = "https://api.github.com/repos/crackingshells/Hatch-Schemas"
-GITHUB_RELEASES_BASE = "https://github.com/crackingshells/Hatch-Schemas/releases/download"
+GITHUB_API_BASE = "https://api.github.com/repos/CrackingShells/Hatch-Schemas"
+GITHUB_RELEASES_BASE = "https://github.com/CrackingShells/Hatch-Schemas/releases/download"
 
 # Schema type definitions
 SCHEMA_TYPES = {

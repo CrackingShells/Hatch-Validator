@@ -6,25 +6,59 @@ This package provides tools for validating Hatch packages, their metadata, and d
 
 __version__ = "0.3.2"
 
-from .package_validator import HatchPackageValidator, PackageValidationError
-from .dependency_resolver import DependencyResolver, DependencyResolutionError
-from .schema_fetcher import SchemaFetcher
-from .schema_cache import SchemaCache
+# Core validation framework
+from .core.validation_context import ValidationContext
+from .core.validator_base import Validator
+from .core.validation_strategy import (
+    ValidationStrategy,
+    DependencyValidationStrategy,
+    ToolsValidationStrategy,
+    EntryPointValidationStrategy,
+    SchemaValidationStrategy
+)
+from .core.validator_factory import ValidatorFactory
 
-from .schemas_retriever import (
+# Package validator
+from .package_validator import HatchPackageValidator, PackageValidationError
+
+# Schema handling components
+from .schemas.schema_fetcher import SchemaFetcher
+from .schemas.schema_cache import SchemaCache
+from .schemas.schemas_retriever import (
     SchemaRetriever,
     get_package_schema, 
     get_registry_schema
 )
 
+# Registry Access
+from .registry.registry_service import RegistryService
+from .registry.v1_1_0.registry_accessor import RegistryAccessor as V110RegistryAccessor
+
+# Version-specific implementations will be imported when needed via the factory
+
 __all__ = [
+    # Core validation framework
+    'ValidationContext',
+    'Validator',
+    'ValidationStrategy',
+    'DependencyValidationStrategy',
+    'ToolsValidationStrategy',
+    'EntryPointValidationStrategy',
+    'SchemaValidationStrategy',
+    'ValidatorFactory',
+    
+    # Package validator
     'HatchPackageValidator',
     'PackageValidationError',
-    'DependencyResolver', 
-    'DependencyResolutionError',
+    
+    # Schema handling components
     'SchemaRetriever',
     'SchemaFetcher',
     'SchemaCache',
     'get_package_schema',
     'get_registry_schema',
+
+    # Registry Access
+    'RegistryService',
+    'V110RegistryAccessor'
 ]

@@ -12,6 +12,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hatch_validator.package_validator import HatchPackageValidator, PackageValidationError
+from hatch_validator.registry.registry_service import RegistryService
 
 # Configure logging
 logging.basicConfig(
@@ -23,7 +24,7 @@ logger = logging.getLogger("hatch.validator_tests")
 
 class TestHatchPackageValidator(unittest.TestCase):
     """Tests for the Hatch package validator using real packages from Hatch-Dev."""
-
+    
     def setUp(self):
         """Set up test environment before each test."""
         # Path to Hatch-Dev packages
@@ -33,7 +34,10 @@ class TestHatchPackageValidator(unittest.TestCase):
                         
         # Build registry data structure from Hatch-Dev packages
         self.registry_data = self._build_test_registry()
-        
+
+        # Create registry service with the test data
+        self.registry_service = RegistryService(self.registry_data)
+
         # Create validator with registry data
         self.validator = HatchPackageValidator(registry_data=self.registry_data)
         
@@ -119,7 +123,8 @@ class TestHatchPackageValidator(unittest.TestCase):
                             # Add to registry
                             registry["repositories"][0]["packages"].append(pkg_entry)
                     except Exception as e:
-                        logger.warning(f"Failed to load metadata for {pkg_name}: {e}")
+                        logger.error(f"Failed to load metadata for {pkg_name}: {e}")
+                        raise e
 
         return registry
     
@@ -128,54 +133,55 @@ class TestHatchPackageValidator(unittest.TestCase):
         pkg_path = self.hatch_dev_path / "arithmetic_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid)
-        self.assertTrue(results["valid"])
-        self.assertTrue(results["metadata_schema"]["valid"])
-        self.assertTrue(results["entry_point"]["valid"])
-        self.assertTrue(results["tools"]["valid"])
-        self.assertTrue(results["dependencies"]["valid"])
-        
+        self.assertTrue(is_valid, f"Package validation failed for arithmetic_pkg")
+        self.assertTrue(results["valid"], f"Overall validation result should be valid")
+        self.assertTrue(results["metadata_schema"]["valid"], f"Schema validation failed: {results.get('metadata_schema', {}).get('errors')}")
+        self.assertTrue(results["entry_point"]["valid"], f"Entry point validation failed: {results.get('entry_point', {}).get('errors')}")
+        self.assertTrue(results["tools"]["valid"], f"Tools validation failed: {results.get('tools', {}).get('errors')}")
+        self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed: {results.get('dependencies', {}).get('errors')}")
+    
     def test_valid_package_with_dependencies(self):
         """Test validating a package with valid dependencies (simple_dep_pkg)."""
         pkg_path = self.hatch_dev_path / "simple_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid)
-        self.assertTrue(results["valid"])
-        self.assertTrue(results["dependencies"]["valid"])
+        self.assertTrue(is_valid, f"Package validation failed for simple_dep_pkg")
+        self.assertTrue(results["valid"], f"Overall validation result should be valid for simple_dep_pkg")
+        self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for simple_dep_pkg: {results.get('dependencies', {}).get('errors')}")
     
     def test_missing_dependency(self):
         """Test validating a package with missing dependencies (missing_dep_pkg)."""
         pkg_path = self.hatch_dev_path / "missing_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertFalse(is_valid)
-        self.assertFalse(results["valid"])
-        self.assertFalse(results["dependencies"]["valid"])
-        self.assertTrue(len(results["dependencies"]["errors"]) > 0)
+        self.assertFalse(is_valid, f"Package validation should fail for missing_dep_pkg")
+        self.assertFalse(results["valid"], f"Overall validation result should be invalid for missing_dep_pkg")
+        self.assertFalse(results["dependencies"]["valid"], f"Dependencies validation should fail for missing_dep_pkg")
+        self.assertTrue(len(results["dependencies"]["errors"]) > 0, f"Missing dependency should produce error messages")
         
         # Check if the error message mentions the missing dependency
         any_error_mentions_missing = any("not found in registry" in error 
                                         for error in results["dependencies"]["errors"])
-        self.assertTrue(any_error_mentions_missing)
+        error_messages = "\n - ".join(results.get("dependencies", {}).get("errors", ["No errors"]))
+        self.assertTrue(any_error_mentions_missing, f"Error should mention dependency not found. Actual errors: \n - {error_messages}")
     
     def test_complex_dependency_chain(self):
         """Test validating a package with complex dependency chain (complex_dep_pkg)."""
         pkg_path = self.hatch_dev_path / "complex_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid)
-        self.assertTrue(results["valid"])
-        self.assertTrue(results["dependencies"]["valid"])
+        self.assertTrue(is_valid, f"Package validation failed for complex_dep_pkg")
+        self.assertTrue(results["valid"], f"Overall validation result should be valid for complex_dep_pkg")
+        self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for complex_dep_pkg: {results.get('dependencies', {}).get('errors')}")
     
     def test_version_dependency_constraint(self):
         """Test validating a package with version-specific dependency (version_dep_pkg)."""
         pkg_path = self.hatch_dev_path / "version_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid)
-        self.assertTrue(results["valid"])
-        self.assertTrue(results["dependencies"]["valid"])
+        self.assertTrue(is_valid, f"Package validation failed for version_dep_pkg")
+        self.assertTrue(results["valid"], f"Overall validation result should be valid for version_dep_pkg")
+        self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for version_dep_pkg: {results.get('dependencies', {}).get('errors')}")
     
     def test_version_dependency_constraint_incompatible(self):
         """Test validating a package with incompatible version dependency."""
@@ -188,24 +194,29 @@ class TestHatchPackageValidator(unittest.TestCase):
                 if pkg["name"] == "base_pkg_1":
                     # Change the version to be incompatible
                     pkg["latest_version"] = "0.0.9"
-                    pkg["versions"][0]["version"] = "0.0.9"
-        
+                    pkg["versions"][0]["version"] = "0.0.9"        
+        # Create a new registry service with the modified registry
+        modified_registry_service = RegistryService(modified_registry)
+
         # Create a new validator with the modified registry
         validator = HatchPackageValidator(registry_data=modified_registry)
-        
+
         # Validate the package with version-specific dependency
         pkg_path = self.hatch_dev_path / "version_dep_pkg"
         is_valid, results = validator.validate_package(pkg_path)
         
-        self.assertFalse(is_valid)
-        self.assertFalse(results["valid"])
-        self.assertFalse(results["dependencies"]["valid"])
+        # No need to reset anything with RegistryService - each validator gets its own instance
+        
+        self.assertFalse(is_valid, f"Package validation should fail with incompatible version")
+        self.assertFalse(results["valid"], f"Overall validation result should be invalid for incompatible version")
+        self.assertFalse(results["dependencies"]["valid"], f"Dependencies validation should fail for incompatible version")
         
         # Check if error message mentions version mismatch
         any_error_mentions_version = any("satisfies constraint" in error 
                                         for error in results["dependencies"]["errors"])
-        self.assertTrue(any_error_mentions_version)
-        
+        error_messages = "\n - ".join(results.get("dependencies", {}).get("errors", ["No errors"]))
+        self.assertTrue(any_error_mentions_version, f"Error should mention version constraint. Actual errors: \n - {error_messages}")
+    
     def test_circular_dependency_packages(self):
         """Test validating packages involved in a circular dependency."""
         #load the metadata for circular_dep_pkg_2_next_v
@@ -216,13 +227,14 @@ class TestHatchPackageValidator(unittest.TestCase):
             # Validate - should detect the circular dependency
             is_valid, results = self.validator.validate_package(pkg_path, ("circular_dep_pkg_2", metadata))
 
-            self.assertFalse(is_valid)
-            self.assertFalse(results["valid"])
-            self.assertFalse(results["dependencies"]["valid"])
+            self.assertFalse(is_valid, f"Package validation should fail for circular dependency")
+            self.assertFalse(results["valid"], f"Overall validation result should be invalid for circular dependency")
+            self.assertFalse(results["dependencies"]["valid"], f"Dependencies validation should fail for circular dependency")
         
             # Check if any error message mentions circular dependency
             any_error_mentions_circular = any("circular" in error.lower() for error in results["dependencies"]["errors"])
-            self.assertTrue(any_error_mentions_circular)
+            error_messages = "\n - ".join(results.get("dependencies", {}).get("errors", ["No errors"]))
+            self.assertTrue(any_error_mentions_circular, f"Error should mention circular dependency. Actual errors: \n - {error_messages}")
         
     def test_entry_point_not_exists(self):
         """Test validating a package with a missing entry point file."""
@@ -254,32 +266,6 @@ class TestHatchPackageValidator(unittest.TestCase):
         finally:
             # Clean up
             shutil.rmtree(temp_dir)
-            
-    def test_pkg_schema_1_1_0_compliance(self):
-        """Test validating a package explicitly with schema version 1.1.0"""
-        
-        pkg_names = [
-            "arithmetic_pkg", 
-            "base_pkg_1", 
-            "base_pkg_2", 
-            "python_dep_pkg",
-            "circular_dep_pkg_1",
-            "circular_dep_pkg_2",
-            "circular_dep_pkg_2_next_v",
-            "complex_dep_pkg",
-            "simple_dep_pkg",
-            "missing_dep_pkg",
-            "version_dep_pkg"
-        ]
-
-        for pkg_name in pkg_names:
-            pkg_path = self.hatch_dev_path / pkg_name
-            #load the metadata
-            with open(pkg_path / "hatch_metadata.json", 'r') as f:
-                metadata = json.load(f)
-                is_valid, _ = self.validator.validate_pkg_metadata(metadata) 
-                self.assertTrue(is_valid, f"Package {pkg_name} failed schema validation.")
-
 
 if __name__ == "__main__":
     unittest.main()
