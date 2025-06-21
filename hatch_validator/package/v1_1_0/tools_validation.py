@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 
 from hatch_validator.core.validation_strategy import ToolsValidationStrategy
 from hatch_validator.core.validation_context import ValidationContext
+from hatch_validator.package.package_service import PackageService
 
 logger = logging.getLogger("hatch_validator.schemas.v1_1_0.tools_validation")
 logger.setLevel(logging.INFO)
@@ -23,11 +24,13 @@ class ToolsValidation(ToolsValidationStrategy):
                 - bool: Whether tool validation was successful
                 - List[str]: List of tool validation errors
         """
-        tools = metadata.get('tools', [])
+        package_service = context.get_data("package_service", None)
+        if package_service is None:
+            package_service = PackageService(metadata)
+        tools = package_service.get_tools()
         if not tools:
             return True, []
-        
-        entry_point = metadata.get('entry_point')
+        entry_point = package_service.get_entry_point()
         if not entry_point:
             return False, ["Entry point required for tool validation"]
         
