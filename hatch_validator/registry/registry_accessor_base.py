@@ -110,6 +110,24 @@ class RegistryAccessorBase(ABC):
         pass
 
     @abstractmethod
+    def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None) -> Dict[str, Any]:
+        """Get reconstructed HATCH dependencies for a specific package version.
+        
+        This method reconstructs the complete dependency information from the differential
+        storage format used in the registry.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str, optional): Specific version. If None, uses latest version.
+
+        Returns:
+            Dict[str, Any]: Reconstructed package metadata with complete dependency information.
+                Contains keys: name, version, dependencies (hatch)
+        """
+        pass
+
+    @abstractmethod
     def list_repositories(self, registry_data: Dict[str, Any]) -> List[str]:
         """List all repository names in the registry.
 
