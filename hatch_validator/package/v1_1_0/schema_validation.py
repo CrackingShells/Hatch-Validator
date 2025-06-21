@@ -11,11 +11,20 @@ logger = logging.getLogger("hatch_validator.schemas.v1_1_0.schema_validation")
 logger.setLevel(logging.INFO)
 
 class SchemaValidation(SchemaValidationStrategy):
-    """Strategy for validating metadata against JSON schema for v1.1.0."""
+    """Strategy for validating metadata against JSON schema.
+
+    In fact given that the schema version is retrieved from the metadata
+    (`package_schema_version`), this can be used for any schema version
+    as long as the schema is available.
+    """
     
     def validate_schema(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate metadata against v1.1.0 schema.
-        
+
+        In fact, given that the function is retrieving the schema version from
+        the metadata (`package_schema_version`), it can be used for any schema
+        version as long as the schema is available.
+
         Args:
             metadata (Dict): Package metadata to validate against schema
             context (ValidationContext): Validation context with resources
@@ -32,14 +41,16 @@ class SchemaValidation(SchemaValidationStrategy):
             schema_version = package_service.get_field("package_schema_version")
             schema = get_package_schema(version=schema_version, force_update=context.force_schema_update)
             if not schema:
-                error_msg = f"Failed to load package schema version {schema_version}"
-                logger.error(error_msg)
-                return False, [error_msg]
-            
+                logger.error(f"Failed to load package schema version {schema_version}")
+                return False, [f"Failed to load package schema version {schema_version}"]
+
+            # Validate against schema
             jsonschema.validate(instance=metadata, schema=schema)
             return True, []
             
         except jsonschema.exceptions.ValidationError as e:
+            logger.error(f"Schema validation error: {e.message}")
             return False, [f"Schema validation error: {e.message}"]
         except Exception as e:
+            logger.error(f"Error during schema validation: {str(e)}")
             return False, [f"Error during schema validation: {str(e)}"]
