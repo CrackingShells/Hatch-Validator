@@ -78,6 +78,11 @@ def configure_parser():
         help="Run only v1.1.0 dependency validation tests"
     )
     test_type.add_argument(
+        "--package-service-only",
+        action="store_true",
+        help="Run only package service and accessor tests"
+    )
+    test_type.add_argument(
         "--all",
         action="store_true",
         help="Run all tests explicitly"
@@ -150,6 +155,9 @@ def run_tests(args):
     elif args.dependency_v1_1_0_only:
         logger.info("Running v1.1.0 dependency validation tests only...")
         test_suite = test_loader.loadTestsFromName("test_dependency_validation_v1_1_0")
+    elif args.package_service_only:
+        logger.info("Running package service and accessor tests only...")
+        test_suite = test_loader.loadTestsFromName("test_package_service.TestPackageService")
     elif args.all:
         # Run all tests explicitly
         logger.info("Running all Hatch-Validator tests...")
