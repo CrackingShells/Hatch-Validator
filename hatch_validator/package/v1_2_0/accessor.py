@@ -1,7 +1,12 @@
 
+import logging
+from typing import Optional
 from pathlib import Path
 
 from hatch_validator.core.pkg_accessor_base import HatchPkgAccessor as HatchPkgAccessorBase
+
+logger = logging.getLogger("hatch.package.v1_2_0.accessor")
+logger.setLevel(logging.DEBUG)
 
 class HatchPkgAccessor(HatchPkgAccessorBase):
     """Metadata accessor for Hatch package schema version 1.2.0.
@@ -34,11 +39,12 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
             'docker': deps.get('docker', [])
         }
 
-    def is_local_dependency(self, dep):
+    def is_local_dependency(self, dep, root_dir : Optional[Path] = None):
         """Check if a Hatch dependency is local for v1.2.0.
 
         Args:
             dep (dict): Dependency dict
+            root_dir (Path, optional): Root directory of the package
         Returns:
             bool: Always False for v1.2.0 (no 'type' field)
         """
@@ -49,5 +55,13 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
             # If conversion fails, it's not a valid path
             return False
 
+        if not name_as_path.is_absolute():
+            if root_dir:
+                # If root_dir is provided, resolve relative paths against it
+                name_as_path = root_dir / name_as_path
+            name_as_path = name_as_path.resolve()
+
+        logger.debug(f"Checking if dependency '{name_as_path}' is local")
+
         # Check if the path is a directory (not a file)
-        return name_as_path.is_dir()
+        return name_as_path.exists()

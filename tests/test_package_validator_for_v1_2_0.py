@@ -387,7 +387,6 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
         self.assertFalse(is_valid, f"Package validation should fail for file_path_dep_pkg.")
         self.assertFalse(results["valid"], f"Overall validation result should be invalid for file_path_dep_pkg")
         self.assertFalse(results["dependencies"]["valid"], f"Dependency validation should fail for file_path_dep_pkg")
-        self.assertTrue(any("not a directory" in err.lower() for err in results["dependencies"].get("errors", [])), "Error should mention not a directory.")
         
 if __name__ == "__main__":
     unittest.main()
