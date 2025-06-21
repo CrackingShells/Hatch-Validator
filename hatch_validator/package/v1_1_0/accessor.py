@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Optional
+
 from hatch_validator.core.pkg_accessor_base import HatchPkgAccessor as HatchPkgAccessorBase
 
 class HatchPkgAccessor(HatchPkgAccessorBase):
@@ -28,11 +31,12 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
             'python': metadata.get('python_dependencies', [])
         }
 
-    def is_local_dependency(self, dep):
+    def is_local_dependency(self, dep, root_dir: Optional[Path] = None):
         """Check if a Hatch dependency is local for v1.1.0.
 
         Args:
             dep (dict): Dependency dict
+            root_dir (Path, optional): Root directory of the package
         Returns:
             bool: True if dependency type is 'local'
         """

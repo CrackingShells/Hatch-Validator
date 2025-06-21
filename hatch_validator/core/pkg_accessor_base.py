@@ -6,6 +6,7 @@ adapt access to package metadata dictionaries according to the schema version.
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
+from pathlib import Path
 
 class HatchPkgAccessor(ABC):
     """Abstract base class for metadata accessors in the Chain of Responsibility pattern.
@@ -64,21 +65,22 @@ class HatchPkgAccessor(ABC):
         if self.next_accessor:
             return self.next_accessor.get_dependencies(metadata)
         raise NotImplementedError("Dependency accessor not implemented for this schema version")
-    
-    def is_local_dependency(self, metadata: Dict[str, Any]) -> bool:
+
+    def is_local_dependency(self, metadata: Dict[str, Any], root_dir: Optional[Path] = None) -> bool:
         """Check if a Hatch dependency is local.
 
         Default behavior: delegate to next accessor in chain if available.
 
         Args:
             metadata (Dict[str, Any]): Package metadata
+            root_dir (Path, optional): Root directory of the package
         Returns:
             bool: True if the dependency is local, False otherwise
         Raises:
             NotImplementedError: If there is no next accessor and this method is not overridden
         """
         if self.next_accessor:
-            return self.next_accessor.is_local_dependency(metadata)
+            return self.next_accessor.is_local_dependency(metadata, root_dir)
         raise NotImplementedError("Local dependency accessor not implemented for this schema version")
 
     def get_entry_point(self, metadata: Dict[str, Any]) -> Any:

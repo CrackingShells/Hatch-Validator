@@ -5,6 +5,7 @@ version-aware access to all top-level fields and dependencies.
 """
 
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from hatch_validator.core.pkg_accessor_factory import HatchPkgAccessorFactory
@@ -90,12 +91,13 @@ class PackageService:
         if not self.is_loaded():
             raise ValueError("Package metadata is not loaded.")
         return self._accessor.get_dependencies(self._metadata)
-    
-    def is_local_dependency(self, dep: Dict[str, Any]) -> bool:
+
+    def is_local_dependency(self, dep: Dict[str, Any], root_dir: Optional[Path] = None) -> bool:
         """Check if a dependency is local.
 
         Args:
             dep (Dict[str, Any]): Dependency dictionary.
+            root_dir (Path, optional): Root directory of the package.
 
         Returns:
             bool: True if the dependency is local, False otherwise.
@@ -105,7 +107,7 @@ class PackageService:
         """
         if not self.is_loaded():
             raise ValueError("Package metadata is not loaded.")
-        return self._accessor.is_local_dependency(dep)
+        return self._accessor.is_local_dependency(dep, root_dir)
 
     def get_entry_point(self) -> Any:
         """Get the entry point from the package metadata.
