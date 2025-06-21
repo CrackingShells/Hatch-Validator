@@ -101,7 +101,7 @@ class RegistryAccessor(RegistryAccessorBase):
         return {}
 
     def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None) -> Dict[str, Any]:
-        """Get reconstructed dependencies for a specific package version.
+        """Get reconstructed HATCH dependencies for a specific package version.
         
         This method reconstructs the complete dependency information from the differential
         storage format used in the registry.
@@ -113,7 +113,7 @@ class RegistryAccessor(RegistryAccessorBase):
             
         Returns:
             Dict[str, Any]: Reconstructed package metadata with complete dependency information.
-                Contains keys: name, version, hatch_dependencies, python_dependencies, compatibility
+                Contains keys: name, version, dependencies (hatch)
         """
         package_data = self.get_package_metadata(registry_data, package_name)
         if not package_data:
@@ -151,78 +151,40 @@ class RegistryAccessor(RegistryAccessorBase):
             
         Returns:
             Dict[str, Any]: Reconstructed package metadata including dependencies and compatibility.
+                - Contains keys: name, version, dependencies (hatch)
         """
-        # Build version chain from current version back to the base
         version_chain = []
-        current_version = version_info
         package_versions = package.get("versions", [])
-        
-        while current_version:
-            version_chain.append(current_version)
-            base_version = current_version.get("base_version")
-            
-            if not base_version:
-                break
-                
-            # Find the base version
-            current_version = None
-            for ver in package_versions:
-                if ver.get("version") == base_version:
-                    current_version = ver
-                    break
         
         # Initialize with empty metadata
         reconstructed = {
             "name": package["name"],
             "version": version_info["version"],
-            "hatch_dependencies": [],
-            "python_dependencies": [],
-            "compatibility": {}
+            "dependencies": []
         }
         
         # Apply changes from oldest to newest (reverse the chain)
-        for ver in reversed(version_chain):
+        # Given that new versions are always appended to the end of the list during package updates,
+        # we can iterate from the start.
+        for ver in package_versions:
             # Process hatch dependencies
             # Add new dependencies
             for dep in ver.get("hatch_dependencies_added", []):
-                reconstructed["hatch_dependencies"].append(dep)
+                reconstructed["dependencies"].append(dep)
             
             # Remove dependencies
             for dep_name in ver.get("hatch_dependencies_removed", []):
-                reconstructed["hatch_dependencies"] = [
-                    d for d in reconstructed["hatch_dependencies"] 
+                reconstructed["dependencies"] = [
+                    d for d in reconstructed["dependencies"]
                     if d.get("name") != dep_name
                 ]
             
             # Modify dependencies
             for mod_dep in ver.get("hatch_dependencies_modified", []):
-                for i, dep in enumerate(reconstructed["hatch_dependencies"]):
+                for i, dep in enumerate(reconstructed["dependencies"]):
                     if dep.get("name") == mod_dep.get("name"):
-                        reconstructed["hatch_dependencies"][i] = mod_dep
+                        reconstructed["dependencies"][i] = mod_dep
                         break
-            
-            # Process Python dependencies
-            # Add new dependencies
-            for dep in ver.get("python_dependencies_added", []):
-                reconstructed["python_dependencies"].append(dep)
-            
-            # Remove dependencies
-            for dep_name in ver.get("python_dependencies_removed", []):
-                reconstructed["python_dependencies"] = [
-                    d for d in reconstructed["python_dependencies"] 
-                    if d.get("name") != dep_name
-                ]
-            
-            # Modify dependencies
-            for mod_dep in ver.get("python_dependencies_modified", []):
-                for i, dep in enumerate(reconstructed["python_dependencies"]):
-                    if dep.get("name") == mod_dep.get("name"):
-                        reconstructed["python_dependencies"][i] = mod_dep
-                        break
-            
-            # Process compatibility info
-            for key, value in ver.get("compatibility_changes", {}).items():
-                reconstructed["compatibility"][key] = value
         
         return reconstructed
     
