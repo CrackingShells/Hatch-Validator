@@ -133,7 +133,7 @@ class TestHatchPackageValidator(unittest.TestCase):
         pkg_path = self.hatch_dev_path / "arithmetic_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid, f"Package validation failed for arithmetic_pkg")
+        self.assertTrue(is_valid, f"Package validation failed for arithmetic_pkg. Errors: {results}")
         self.assertTrue(results["valid"], f"Overall validation result should be valid")
         self.assertTrue(results["metadata_schema"]["valid"], f"Schema validation failed: {results.get('metadata_schema', {}).get('errors')}")
         self.assertTrue(results["entry_point"]["valid"], f"Entry point validation failed: {results.get('entry_point', {}).get('errors')}")
@@ -145,7 +145,7 @@ class TestHatchPackageValidator(unittest.TestCase):
         pkg_path = self.hatch_dev_path / "simple_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid, f"Package validation failed for simple_dep_pkg")
+        self.assertTrue(is_valid, f"Package validation failed for simple_dep_pkg. Errors: {results}")
         self.assertTrue(results["valid"], f"Overall validation result should be valid for simple_dep_pkg")
         self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for simple_dep_pkg: {results.get('dependencies', {}).get('errors')}")
     
@@ -170,7 +170,7 @@ class TestHatchPackageValidator(unittest.TestCase):
         pkg_path = self.hatch_dev_path / "complex_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid, f"Package validation failed for complex_dep_pkg")
+        self.assertTrue(is_valid, f"Package validation failed for complex_dep_pkg. Errors: {results}")
         self.assertTrue(results["valid"], f"Overall validation result should be valid for complex_dep_pkg")
         self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for complex_dep_pkg: {results.get('dependencies', {}).get('errors')}")
     
@@ -179,7 +179,7 @@ class TestHatchPackageValidator(unittest.TestCase):
         pkg_path = self.hatch_dev_path / "version_dep_pkg"
         is_valid, results = self.validator.validate_package(pkg_path)
         
-        self.assertTrue(is_valid, f"Package validation failed for version_dep_pkg")
+        self.assertTrue(is_valid, f"Package validation failed for version_dep_pkg. Errors: {results}")
         self.assertTrue(results["valid"], f"Overall validation result should be valid for version_dep_pkg")
         self.assertTrue(results["dependencies"]["valid"], f"Dependencies validation failed for version_dep_pkg: {results.get('dependencies', {}).get('errors')}")
     

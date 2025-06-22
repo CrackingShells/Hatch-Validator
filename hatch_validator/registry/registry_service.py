@@ -174,11 +174,7 @@ class RegistryService:
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
         
-        if hasattr(self._accessor, 'get_package_dependencies'):
-            return self._accessor.get_package_dependencies(self._registry_data, package_name, version)
-        else:
-            # Fallback for accessors without this method
-            return {}
+        return self._accessor.get_package_dependencies(self._registry_data, package_name, version)
     
     def find_compatible_version(self, package_name: str, version_constraint: Optional[str] = None) -> Optional[str]:
         """Find a compatible version for a package given a version constraint.

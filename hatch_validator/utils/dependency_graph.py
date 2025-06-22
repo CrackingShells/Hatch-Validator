@@ -60,7 +60,7 @@ class DependencyGraph:
         if package not in self.adjacency_list:
             self.adjacency_list[package] = []
         if dependency not in self.adjacency_list[package]:
-            self.adjacency_list[package].append(dependency)
+            self.adjacency_list[package] += [dependency]
             
     def add_package(self, package: str) -> None:
         """Add a package to the graph without dependencies.
