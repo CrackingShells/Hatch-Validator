@@ -104,7 +104,29 @@ class RegistryAccessor(RegistryAccessorBase):
                     return pkg
         return {}
 
-    def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None) -> Dict[str, Any]:
+    def get_package_version_info(self, registry_data: Dict[str, Any], package_name: str, version: str, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get metadata for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str): Specific version to retrieve.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+
+        Returns:
+            Dict[str, Any]: Package metadata for the specified version.
+        """
+        package_data = self.get_package_metadata(registry_data, package_name, repo_name)
+        if not package_data:
+            return {}
+        
+        versions = package_data.get('versions', [])
+        for v in versions:
+            if v.get('version') == version:
+                return v
+        
+        return {}
+
     def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None, repo_name: Optional[str] = None) -> Dict[str, Any]:
         """Get reconstructed HATCH dependencies for a specific package version.
         
@@ -192,8 +214,25 @@ class RegistryAccessor(RegistryAccessorBase):
                         break
         
         return reconstructed
-    
-    def find_compatible_version(self, registry_data: Dict[str, Any], package_name: str, version_constraint: str = None) -> Optional[str]:
+
+    def get_package_uri(self, registry_data: Dict[str, Any], package_name: str, version: str = None, repo_name: Optional[str] = None) -> Optional[str]:
+        """Get the URI for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str, optional): Package version. If None, uses latest version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+            
+        Returns:
+            Optional[str]: URI for the package version, or None if not found.
+        """
+        package_version_data = self.get_package_version_info(registry_data, package_name, version, repo_name)
+        if not package_version_data:
+            return None
+
+        return package_version_data.get('release_uri')
+
     def find_compatible_version(self, registry_data: Dict[str, Any], package_name: str, version_constraint: str = None, repo_name: Optional[str] = None) -> Optional[str]:
         """Find a compatible version for a package given a version constraint.
         

@@ -189,8 +189,57 @@ class RegistryService:
         if repo is None and self.has_repository_name(package_name):
             repo, pkg = package_name.split(":", 1)
         return self._accessor.get_package_dependencies(self._registry_data, pkg, version, repo)
+
+    def get_package_version_info(self, package_name: str, version: str, repo_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get metadata for a specific version of a package.
+
+        Args:
+            package_name (str): Package name.
+            version (str): Version string.
+            repo_name (str, optional): Repository name. If None, will infer from package_name if present.
+
+        Returns:
+            Optional[Dict[str, Any]]: Package metadata for the specified version, or None if not found.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
+            RegistryError: If package does not exist.
+        """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        pkg = package_name
+        repo = repo_name
+        if repo is None and self.has_repository_name(package_name):
+            repo, pkg = package_name.split(":", 1)
+        if not self.package_exists(pkg, repo):
+            raise RegistryError(f"Package '{pkg}' does not exist in the registry")
+        return self._accessor.get_package_version_info(self._registry_data, pkg, version, repo)
     
-    def find_compatible_version(self, package_name: str, version_constraint: Optional[str] = None) -> Optional[str]:
+    def get_package_uri(self, package_name: str, version: str, repo_name: Optional[str] = None) -> Optional[str]:
+        """Get the URI for a specific version of a package.
+
+        Args:
+            package_name (str): Package name.
+            version (str): Version string.
+            repo_name (str, optional): Repository name. If None, will infer from package_name if present.
+
+        Returns:
+            Optional[str]: URI for the package version, or None if not found.
+
+        Raises:
+            RegistryError: If registry data is not loaded.
+            RegistryError: If package does not exist.
+        """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        pkg = package_name
+        repo = repo_name
+        if repo is None and self.has_repository_name(package_name):
+            repo, pkg = package_name.split(":", 1)
+        if not self.package_exists(pkg, repo):
+            raise RegistryError(f"Package '{pkg}' does not exist in the registry")
+        return self._accessor.get_package_uri(self._registry_data, pkg, version, repo)
+
     def find_compatible_version(self, package_name: str, version_constraint: Optional[str] = None, repo_name: Optional[str] = None) -> Optional[str]:
         """Find a compatible version for a package given a version constraint.
 

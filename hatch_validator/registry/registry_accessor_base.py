@@ -133,6 +133,36 @@ class RegistryAccessorBase(ABC):
         pass
 
     @abstractmethod
+    def get_package_version_info(self, registry_data: Dict[str, Any], package_name: str, version: str, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get metadata for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str): Package version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+        
+        Returns:
+            Dict[str, Any]: Metadata for the package version.
+        """
+        pass
+
+    @abstractmethod
+    def get_package_uri(self, registry_data: Dict[str, Any], package_name: str, version: str, repo_name: Optional[str] = None) -> str:
+        """Get the URI for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str): Package version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+        
+        Returns:
+            str: URI for the package version.
+        """
+        pass
+
+    @abstractmethod
     def list_repositories(self, registry_data: Dict[str, Any]) -> List[str]:
         """List all repository names in the registry.
 
