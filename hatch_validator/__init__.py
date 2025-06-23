@@ -4,7 +4,7 @@ Hatch-Validator package for validating Hatch packages and dependencies.
 This package provides tools for validating Hatch packages, their metadata, and dependencies.
 """
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 
 # Core validation framework
 from hatch_validator.core.validation_context import ValidationContext
