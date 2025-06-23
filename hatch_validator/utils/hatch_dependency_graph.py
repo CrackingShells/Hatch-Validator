@@ -98,7 +98,7 @@ class HatchDependencyGraphBuilder:
             ValidationError: If there are validation errors during graph construction.
             DependencyGraphError: If the dependency graph contains cycles.
         """
-        graph = self.build_dependency_graph(self.package_service.get_dependencies(), context)
+        graph = self.build_dependency_graph(self.package_service.get_dependencies().get("hatch", []), context)
         return graph.get_install_order_dependencies()
 
     def _get_local_dependency_path(self, dep: Dict, root_dir: Optional[Path] = None) -> Path:

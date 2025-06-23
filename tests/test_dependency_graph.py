@@ -7,9 +7,95 @@ including cycle detection, topological sorting, and path finding.
 import unittest
 import logging
 from hatch_validator.utils.dependency_graph import DependencyGraph, DependencyGraphError
+from hatch_validator.utils.hatch_dependency_graph import HatchDependencyGraphBuilder
+from hatch_validator.registry.registry_service import RegistryService
+from hatch_validator.package.package_service import PackageService
+from hatch_validator.core.validation_context import ValidationContext
+from pathlib import Path
 
 logger = logging.getLogger("hatch.validator_test_dependency_graph")
 logger.setLevel(logging.DEBUG)
+
+MOCK_REGISTRY = {
+    "registry_schema_version": "1.1.0",
+    "last_updated": "2025-06-23T12:00:00Z",
+    "repositories": [
+        {
+            "name": "Hatch-Dev",
+            "url": "https://example.com/hatch-dev",
+            "last_indexed": "2025-06-23T12:00:00Z",
+            "packages": [
+                {
+                    "name": "base_pkg_1",
+                    "description": "Base package 1.",
+                    "tags": ["core", "base"],
+                    "versions": [
+                        {
+                            "author": {"GitHubID": "aliceGH", "email": "alice@example.com"},
+                            "version": "1.0.0",
+                            "release_uri": "https://example.com/hatch-dev/base_pkg_1/1.0.0",
+                            "added_date": "2025-06-23T12:00:00Z",
+                            "hatch_dependencies_added": [],
+                            "hatch_dependencies_removed": []
+                        }
+                    ],
+                    "latest_version": "1.0.0"
+                },
+                {
+                    "name": "util_pkg",
+                    "description": "Utility package.",
+                    "tags": ["util"],
+                    "versions": [
+                        {
+                            "author": {"GitHubID": "bobGH", "email": "bob@example.com"},
+                            "version": "0.1.0",
+                            "release_uri": "https://example.com/hatch-dev/util_pkg/0.1.0",
+                            "added_date": "2025-06-23T12:00:00Z",
+                            "hatch_dependencies_added": [
+                                {"name": "base_pkg_1", "type": "remote", "version_constraint": ">=1.0.0"}
+                            ],
+                            "hatch_dependencies_removed": []
+                        }
+                    ],
+                    "latest_version": "0.1.0"
+                }
+            ]
+        }
+    ],
+    "stats": {
+        "total_packages": 2,
+        "total_versions": 2
+    }
+}
+
+MOCK_PKG_METADATA = {
+    "package_schema_version": "1.1.0",
+    "name": "util_pkg",
+    "version": "0.1.0",
+    "description": "Utility package.",
+    "tags": ["util"],
+    "author": {"name": "Bob", "email": "bob@example.com"},
+    "license": {"name": "MIT"},
+    "entry_point": "util_pkg.main:main",
+    "hatch_dependencies": [
+        {"name": "base_pkg_1", "type": {"type": "remote"}, "version_constraint": ">=1.0.0"}
+    ],
+    "python_dependencies": [],
+    "contributors": [],
+    "repository": "https://example.com/hatch-dev/util_pkg",
+    "documentation": "https://example.com/hatch-dev/util_pkg/docs",
+    "compatibility": {"hatchling": ">=0.1.0", "python": ">=3.7"},
+    "tools": [],
+    "citations": {"origin": "", "mcp": ""}
+}
+
+class DummyContext(ValidationContext):
+    def __init__(self):
+        super().__init__()
+        self.package_dir = Path("/tmp")
+        self._data = {"pending_update": ("util_pkg", None)}
+    def get_data(self, key, default=None):
+        return self._data.get(key, default)
 
 class TestDependencyGraph(unittest.TestCase):
     """Test cases for the DependencyGraph class."""
@@ -17,37 +103,39 @@ class TestDependencyGraph(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.empty_graph = DependencyGraph()
-        
-        # Simple acyclic graph: A -> B -> C
+        # Simple acyclic graph: A -> B -> C (rich format)
         self.simple_acyclic = DependencyGraph({
-            'A': ['B'],
-            'B': ['C'],
+            'A': [{"name": "B", "version_constraint": None, "resolved_version": None}],
+            'B': [{"name": "C", "version_constraint": None, "resolved_version": None}],
             'C': []
         })
-        
-        # Graph with cycle: A -> B -> C -> A
+        # Graph with cycle: A -> B -> C -> A (rich format)
         self.simple_cyclic = DependencyGraph({
-            'A': ['B'],
-            'B': ['C'],
-            'C': ['A']
+            'A': [{"name": "B", "version_constraint": None, "resolved_version": None}],
+            'B': [{"name": "C", "version_constraint": None, "resolved_version": None}],
+            'C': [{"name": "A", "version_constraint": None, "resolved_version": None}]
         })
-        
-        # Complex acyclic graph
+        # Complex acyclic graph (rich format)
         self.complex_acyclic = DependencyGraph({
-            'app': ['utils', 'db'],
-            'utils': ['math'],
-            'db': ['utils'],
+            'app': [
+                {"name": "utils", "version_constraint": None, "resolved_version": None},
+                {"name": "db", "version_constraint": None, "resolved_version": None}
+            ],
+            'utils': [{"name": "math", "version_constraint": None, "resolved_version": None}],
+            'db': [{"name": "utils", "version_constraint": None, "resolved_version": None}],
             'math': [],
             'standalone': []
         })
-        
-        # Complex graph with multiple cycles
+        # Complex graph with multiple cycles (rich format)
         self.complex_cyclic = DependencyGraph({
-            'A': ['B'],
-            'B': ['C', 'D'],
-            'C': ['A'],  # Cycle: A -> B -> C -> A
-            'D': ['E'],
-            'E': ['D']   # Cycle: D -> E -> D
+            'A': [{"name": "B", "version_constraint": None, "resolved_version": None}],
+            'B': [
+                {"name": "C", "version_constraint": None, "resolved_version": None},
+                {"name": "D", "version_constraint": None, "resolved_version": None}
+            ],
+            'C': [{"name": "A", "version_constraint": None, "resolved_version": None}],  # Cycle: A -> B -> C -> A
+            'D': [{"name": "E", "version_constraint": None, "resolved_version": None}],
+            'E': [{"name": "D", "version_constraint": None, "resolved_version": None}]   # Cycle: D -> E -> D
         })
     
     def test_empty_graph_no_cycles(self):
@@ -130,11 +218,13 @@ class TestDependencyGraph(unittest.TestCase):
     def test_add_dependency(self):
         """Test adding dependencies to the graph."""
         graph = DependencyGraph()
-        graph.add_dependency('pkg1', 'pkg2')
-        graph.add_dependency('pkg1', 'pkg3')
-        
-        self.assertEqual(graph.get_direct_dependencies('pkg1'), ['pkg2', 'pkg3'], 
-                        "Package pkg1 should have dependencies ['pkg2', 'pkg3'] after adding them")
+        graph.add_dependency('pkg1', {"name": "pkg2", "version_constraint": None, "resolved_version": None})
+        graph.add_dependency('pkg1', {"name": "pkg3", "version_constraint": None, "resolved_version": None})
+        self.assertEqual(
+            sorted(graph.get_direct_dependencies('pkg1')),
+            ['pkg2', 'pkg3'],
+            "Package pkg1 should have dependencies ['pkg2', 'pkg3'] after adding them"
+        )
     
     def test_add_package(self):
         """Test adding a package without dependencies."""
@@ -174,25 +264,35 @@ class TestDependencyGraph(unittest.TestCase):
     def test_from_dependency_dict(self):
         """Test creating graph from dependency dictionary."""
         deps = {
-            'pkg1': ['pkg2', 'pkg3'],
-            'pkg2': ['pkg3'],
+            'pkg1': [
+                {"name": "pkg2", "version_constraint": None, "resolved_version": None},
+                {"name": "pkg3", "version_constraint": None, "resolved_version": None}
+            ],
+            'pkg2': [{"name": "pkg3", "version_constraint": None, "resolved_version": None}],
             'pkg3': []
         }
         graph = DependencyGraph.from_dependency_dict(deps)
-        
-        self.assertEqual(graph.get_direct_dependencies('pkg1'), ['pkg2', 'pkg3'], 
-                        "pkg1 should have dependencies pkg2 and pkg3")
-        self.assertEqual(graph.get_direct_dependencies('pkg2'), ['pkg3'], 
-                        "pkg2 should have dependency pkg3")
-        self.assertEqual(graph.get_direct_dependencies('pkg3'), [], 
-                        "pkg3 should have no dependencies")
+        self.assertEqual(
+            sorted(graph.get_direct_dependencies('pkg1')),
+            ['pkg2', 'pkg3'],
+            "pkg1 should have dependencies pkg2 and pkg3"
+        )
+        self.assertEqual(
+            graph.get_direct_dependencies('pkg2'),
+            ['pkg3'],
+            "pkg2 should have dependency pkg3"
+        )
+        self.assertEqual(
+            graph.get_direct_dependencies('pkg3'),
+            [],
+            "pkg3 should have no dependencies"
+        )
     
     def test_self_dependency_cycle(self):
         """Test detection of self-dependency cycles."""
         graph = DependencyGraph({
-            'A': ['A']  # Self-dependency
+            'A': [{"name": "A", "version_constraint": None, "resolved_version": None}]  # Self-dependency
         })
-        
         has_cycles, cycles = graph.detect_cycles()
         self.assertTrue(has_cycles, "Graph with self-dependency should detect cycle")
         self.assertEqual(len(cycles), 1, "Self-dependency should create exactly one cycle")
@@ -207,7 +307,7 @@ class TestDependencyGraph(unittest.TestCase):
     def test_isolated_packages(self):
         """Test handling of isolated packages in the graph."""
         graph = DependencyGraph({
-            'connected1': ['connected2'],
+            'connected1': [{"name": "connected2", "version_constraint": None, "resolved_version": None}],
             'connected2': [],
             'isolated': []
         })
@@ -220,6 +320,33 @@ class TestDependencyGraph(unittest.TestCase):
         success, sorted_packages = graph.topological_sort()
         self.assertTrue(success, "Topological sort should succeed with isolated packages")
         self.assertEqual(len(sorted_packages), 3, "Should include all packages in topological sort")
+
+class TestHatchDependencyGraphBuilder(unittest.TestCase):
+    """Test cases for the HatchDependencyGraphBuilder class (integration with registry and package service)."""
+
+    def setUp(self):
+        self.registry_service = RegistryService(MOCK_REGISTRY)
+        self.package_service = PackageService(MOCK_PKG_METADATA)
+        self.builder = HatchDependencyGraphBuilder(self.package_service, self.registry_service)
+        self.context = DummyContext()
+
+    def test_build_dependency_graph(self):
+        deps = self.package_service.get_dependencies().get("hatch", [])
+        graph = self.builder.build_dependency_graph(deps, self.context)
+        self.assertTrue("util_pkg" in graph.get_all_packages(), f"Expected 'util_pkg' in graph packages, got: {graph.get_all_packages()}")
+        self.assertTrue("base_pkg_1" in graph.get_all_packages(), f"Expected 'base_pkg_1' in graph packages, got: {graph.get_all_packages()}")
+        # util_pkg should depend on base_pkg_1
+        self.assertIn(
+            "base_pkg_1",
+            graph.get_direct_dependencies("util_pkg"),
+            f"Expected 'base_pkg_1' in util_pkg dependencies, got: {graph.get_direct_dependencies('util_pkg')}"
+        )
+
+    def test_get_install_ready_dependencies(self):
+        install_order = self.builder.get_install_ready_dependencies(self.context)
+        # Should include both util_pkg and base_pkg_1
+        names = [dep["name"] for dep in install_order]
+        self.assertIn("base_pkg_1", names, f"Expected 'base_pkg_1' in install order, got: {names}")
 
 
 if __name__ == '__main__':
