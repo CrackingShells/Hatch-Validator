@@ -83,6 +83,11 @@ def configure_parser():
         help="Run only package service and accessor tests"
     )
     test_type.add_argument(
+        "--registry-service-only",
+        action="store_true",
+        help="Run only RegistryService accessor tests"
+    )
+    test_type.add_argument(
         "--all",
         action="store_true",
         help="Run all tests explicitly"
@@ -158,6 +163,9 @@ def run_tests(args):
     elif args.package_service_only:
         logger.info("Running package service and accessor tests only...")
         test_suite = test_loader.loadTestsFromName("test_package_service.TestPackageService")
+    elif args.registry_service_only:
+        logger.info("Running RegistryService accessor tests only...")
+        test_suite = test_loader.loadTestsFromName("test_registry_service.TestRegistryServiceV110")
     elif args.all:
         # Run all tests explicitly
         logger.info("Running all Hatch-Validator tests...")
