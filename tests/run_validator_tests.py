@@ -153,7 +153,7 @@ def run_tests(args):
         test_suite = test_loader.loadTestsFromName("test_schema_validators")
     elif args.dependency_graph_only:
         logger.info("Running dependency graph utility tests only...")
-        test_suite = test_loader.loadTestsFromName("test_dependency_graph.TestDependencyGraph")
+        test_suite = test_loader.loadTestsFromName("test_dependency_graph")
     elif args.version_utils_only:
         logger.info("Running version constraint utility tests only...")
         test_suite = test_loader.loadTestsFromName("test_version_utils")
