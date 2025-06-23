@@ -106,11 +106,12 @@ class RegistryService:
             'metadata': metadata
         }
     
-    def package_exists(self, package_name: str) -> bool:
+    def package_exists(self, package_name: str, repo_name: Optional[str] = None) -> bool:
         """Check if a package exists in the registry.
 
         Args:
             package_name (str): Name of the package to check.
+            repo_name (str, optional): Repository name. If None, will infer from package_name if present.
 
         Returns:
             bool: True if package exists.
@@ -120,14 +121,19 @@ class RegistryService:
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
-        
-        return self._accessor.package_exists(self._registry_data, package_name)
+        # If repo_name is not provided and package_name contains repo, split and pass both
+        pkg = package_name
+        repo = repo_name
+        if repo is None and self.has_repository_name(package_name):
+            repo, pkg = package_name.split(":", 1)
+        return self._accessor.package_exists(self._registry_data, pkg, repo)
     
-    def get_package_versions(self, package_name: str) -> List[str]:
+    def get_package_versions(self, package_name: str, repo_name: Optional[str] = None) -> List[str]:
         """Get all versions for a package.
 
         Args:
             package_name (str): Package name.
+            repo_name (str, optional): Repository name. If None, will infer from package_name if present.
 
         Returns:
             List[str]: List of version strings, empty if package not found.
@@ -138,14 +144,19 @@ class RegistryService:
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
-        
-        if not self.package_exists(package_name):
-            raise RegistryError(f"Package '{package_name}' does not exist in the registry")
-                
-        return self._accessor.get_package_versions(self._registry_data, package_name)
+        pkg = package_name
+        repo = repo_name
+        if repo is None and self.has_repository_name(package_name):
+            repo, pkg = package_name.split(":", 1)
+        if not self.package_exists(pkg, repo):
+            raise RegistryError(f"Package '{pkg}' does not exist in the registry")
+        return self._accessor.get_package_versions(self._registry_data, pkg, repo)
     
-    def get_all_package_names(self) -> List[str]:
-        """Get all package names from registry.
+    def get_all_package_names(self, repo_name: Optional[str] = None) -> List[str]:
+        """Get all package names from registry, optionally for a specific repository.
+
+        Args:
+            repo_name (str, optional): Repository name. If None, returns all packages across all repositories.
 
         Returns:
             List[str]: List of all package names, empty if registry not loaded.
@@ -155,15 +166,15 @@ class RegistryService:
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
-        
-        return self._accessor.get_all_package_names(self._registry_data)
+        return self._accessor.get_all_package_names(self._registry_data, repo_name)
     
-    def get_package_dependencies(self, package_name: str, version: Optional[str] = None) -> Dict[str, Any]:
+    def get_package_dependencies(self, package_name: str, version: Optional[str] = None, repo_name: Optional[str] = None) -> Dict[str, Any]:
         """Get reconstructed dependencies for a specific package version.
 
         Args:
             package_name (str): Package name.
             version (str, optional): Specific version. If None, uses latest version.
+            repo_name (str, optional): Repository name. If None, will infer from package_name if present.
 
         Returns:
             Dict[str, Any]: Reconstructed package metadata with dependencies.
@@ -173,15 +184,20 @@ class RegistryService:
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
-        
-        return self._accessor.get_package_dependencies(self._registry_data, package_name, version)
+        pkg = package_name
+        repo = repo_name
+        if repo is None and self.has_repository_name(package_name):
+            repo, pkg = package_name.split(":", 1)
+        return self._accessor.get_package_dependencies(self._registry_data, pkg, version, repo)
     
     def find_compatible_version(self, package_name: str, version_constraint: Optional[str] = None) -> Optional[str]:
+    def find_compatible_version(self, package_name: str, version_constraint: Optional[str] = None, repo_name: Optional[str] = None) -> Optional[str]:
         """Find a compatible version for a package given a version constraint.
 
         Args:
             package_name (str): Package name.
             version_constraint (str, optional): Version constraint (e.g., '>=1.0.0').
+            repo_name (str, optional): Repository name. If None, will infer from package_name if present.
 
         Returns:
             Optional[str]: Compatible version string, or None if not found.
@@ -191,25 +207,25 @@ class RegistryService:
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
-        
+        pkg = package_name
+        repo = repo_name
+        if repo is None and self.has_repository_name(package_name):
+            repo, pkg = package_name.split(":", 1)
         if hasattr(self._accessor, 'find_compatible_version'):
-            return self._accessor.find_compatible_version(self._registry_data, package_name, version_constraint)
+            return self._accessor.find_compatible_version(self._registry_data, pkg, version_constraint, repo)
         else:
             # Fallback for accessors without this method
-            versions = self.get_package_versions(package_name)
+            versions = self.get_package_versions(pkg, repo)
             if not versions:
                 return None
             if not version_constraint:
                 return versions[-1]
-            # Use VersionConstraintValidator to find a compatible version (prefer highest)
             compatible_versions = [
                 v for v in sorted(versions, key=lambda x: tuple(int(p) if p.isdigit() else p for p in x.split('.')), reverse=True)
                 if VersionConstraintValidator.is_version_compatible(v, version_constraint)[0]
             ]
-
             if not compatible_versions:
-                raise VersionConstraintError(f"No compatible version found for '{package_name}' with constraint '{version_constraint}'")
-        
+                raise VersionConstraintError(f"No compatible version found for '{pkg}' with constraint '{version_constraint}'")
             return compatible_versions[0]
     
     def validate_package_exists(self, package_name: str) -> Tuple[bool, Optional[str]]:
@@ -451,6 +467,23 @@ class RegistryService:
             raise RegistryError("Registry data not loaded")
         return self._accessor.list_packages(self._registry_data, repo_name)
 
+    def has_repository_name(self, pkg_name: str) -> bool:
+        """Check if a package name has a repository name following
+        the convention 'repo_name:package_name'.
+
+        Args:
+            pkg_name (str): Package name.
+        Returns:
+            bool: True if package has a repository name.
+        Raises:
+            RegistryError: If registry data is not loaded.
+        """
+        if not self.is_loaded():
+            raise RegistryError("Registry data not loaded")
+        
+        repo_name_candidate = pkg_name.split(":")[0]
+        return self.repository_exists(repo_name_candidate)
+
     def get_package_by_repo(self, repo_name: str, package_name: str) -> Optional[Dict[str, Any]]:
         """Get a package by repository and package name.
 
@@ -464,4 +497,5 @@ class RegistryService:
         """
         if not self.is_loaded():
             raise RegistryError("Registry data not loaded")
+        
         return self._accessor.get_package_by_repo(self._registry_data, repo_name, package_name)
