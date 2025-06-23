@@ -144,17 +144,18 @@ class HatchDependencyGraphBuilder:
             local_pkg_service = PackageService(local_pkg_metadata)
             local_pkg_name = local_pkg_service.get_field('name')
 
+            path = self._get_local_dependency_path(dep, root_dir)
             remote_dep_obj = {
                     "name": local_pkg_name,
                     "version_constraint": dep.get('version_constraint'),
-                    "resolved_version": local_pkg_service.get_field('version')  # For local deps, use actual version
+                    "resolved_version": local_pkg_service.get_field('version'),  # For local deps, use actual version
+                    "uri": f"file://{str(path)}"
                 }
             graph.add_dependency(parent_pkg_name, remote_dep_obj)
 
             deps_obj = local_pkg_service.get_dependencies()
             hatch_deps = deps_obj.get('hatch', [])
 
-            path = self._get_local_dependency_path(dep, root_dir)
             for dep in hatch_deps:
                 if self.package_service.is_local_dependency(dep, path):
                     self._add_local_dependency_graph(local_pkg_name, dep, graph, context, path)
@@ -195,7 +196,8 @@ class HatchDependencyGraphBuilder:
             remote_dep_obj = {
                 "name": dep_name,
                 "version_constraint": version_constraint,
-                "resolved_version": compatible_version
+                "resolved_version": compatible_version,
+                "uri": self.registry_service.get_package_uri(dep_name, compatible_version)
             }
             graph.add_dependency(parent_pkg_name, remote_dep_obj)
 
