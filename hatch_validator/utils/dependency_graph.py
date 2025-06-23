@@ -21,20 +21,21 @@ class DependencyGraph:
     graph operations that are independent of schema version.
     """
     
-    def __init__(self, adjacency_list: Optional[Dict[str, List[str]]] = None):
+    def __init__(self, adjacency_list: Optional[Dict[str, List[Dict]]] = None):
         """Initialize the dependency graph.
         
         Args:
-            adjacency_list (Dict[str, List[str]], optional): Initial adjacency list.
-                Maps package names to their direct dependencies. Defaults to None.
+            adjacency_list (Dict[str, List[Dict]], optional): Initial adjacency list.
+                Maps package names to their direct dependencies. Each dependency is a dict
+                with keys: name, version_constraint, resolved_version. Defaults to None.
         """
         self.adjacency_list = adjacency_list or {}
 
-    def to_dict(self) -> Dict[str, List[str]]:
+    def to_dict(self) -> Dict[str, List[Dict]]:
         """Convert the graph to a dictionary representation.
         
         Returns:
-            Dict[str, List[str]]: Adjacency list representation of the graph.
+            Dict[str, List[Dict]]: Adjacency list representation of the graph.
         """
         return self.adjacency_list.copy()
 
@@ -50,17 +51,27 @@ class DependencyGraph:
         """Official string representation for debugging."""
         return f"{self.__class__.__name__}({self.to_dict()})"
         
-    def add_dependency(self, package: str, dependency: str) -> None:
+    def add_dependency(self, package: str, dependency: Dict) -> None:
         """Add a dependency relationship to the graph.
         
         Args:
             package (str): The package that depends on another package.
-            dependency (str): The package being depended upon.
+            dependency (Dict): Dependency object with keys: name, version_constraint, resolved_version.
         """
         if package not in self.adjacency_list:
             self.adjacency_list[package] = []
-        if dependency not in self.adjacency_list[package]:
-            self.adjacency_list[package] += [dependency]
+        
+        dep_name = dependency.get("name")
+        if not dep_name:
+            raise ValueError("Dependency dict must contain 'name' key")
+        
+        # Avoid duplicates by name and resolved_version
+        existing = any(
+            d.get("name") == dep_name and d.get("resolved_version") == dependency.get("resolved_version")
+            for d in self.adjacency_list[package]
+        )
+        if not existing:
+            self.adjacency_list[package].append(dependency)
             
     def add_package(self, package: str) -> None:
         """Add a package to the graph without dependencies.
@@ -71,6 +82,17 @@ class DependencyGraph:
         if package not in self.adjacency_list:
             self.adjacency_list[package] = []
     
+    def _get_dependency_name(self, dependency: Dict) -> str:
+        """Extract dependency name from dict format.
+        
+        Args:
+            dependency (Dict): Dependency in dict format.
+            
+        Returns:
+            str: The dependency name.
+        """
+        return dependency.get("name", "")
+    
     def get_all_packages(self) -> Set[str]:
         """Get all packages in the graph.
         
@@ -79,7 +101,8 @@ class DependencyGraph:
         """
         packages = set(self.adjacency_list.keys())
         for deps in self.adjacency_list.values():
-            packages.update(deps)
+            for dep in deps:
+                packages.add(self._get_dependency_name(dep))
         return packages
     
     def detect_cycles(self) -> Tuple[bool, List[List[str]]]:
@@ -121,10 +144,10 @@ class DependencyGraph:
             # Mark as gray (visiting)
             colors[node] = 1
             path.append(node)
-            
-            # Visit all dependencies
+              # Visit all dependencies
             for dep in self.adjacency_list.get(node, []):
-                if dfs(dep):
+                dep_name = self._get_dependency_name(dep)
+                if dfs(dep_name):
                     # Continue searching for more cycles instead of returning immediately
                     pass
             
@@ -166,11 +189,11 @@ class DependencyGraph:
         # Calculate in-degrees
         for package in all_packages:
             if package not in in_degree:
-                in_degree[package] = 0
-        
+                in_degree[package] = 0        
         for package, deps in self.adjacency_list.items():
             for dep in deps:
-                in_degree[dep] += 1
+                dep_name = self._get_dependency_name(dep)
+                in_degree[dep_name] += 1
         
         # Start with packages that have no incoming edges
         queue = deque([pkg for pkg in all_packages if in_degree[pkg] == 0])
@@ -178,13 +201,13 @@ class DependencyGraph:
         
         while queue:
             current = queue.popleft()
-            result.append(current)
-            
+            result.append(current)            
             # Remove edges from current package
             for dep in self.adjacency_list.get(current, []):
-                in_degree[dep] -= 1
-                if in_degree[dep] == 0:
-                    queue.append(dep)
+                dep_name = self._get_dependency_name(dep)
+                in_degree[dep_name] -= 1
+                if in_degree[dep_name] == 0:
+                    queue.append(dep_name)
         
         return len(result) == len(all_packages), result
     
@@ -204,27 +227,27 @@ class DependencyGraph:
             return [start]
         
         queue = deque([(start, [start])])
-        visited = {start}
-        
+        visited = {start}        
         while queue:
             current, path = queue.popleft()
             
             for dep in self.adjacency_list.get(current, []):
-                if dep == target:
-                    return path + [dep]
+                dep_name = self._get_dependency_name(dep)
+                if dep_name == target:
+                    return path + [dep_name]
                 
-                if dep not in visited:
-                    visited.add(dep)
-                    queue.append((dep, path + [dep]))
+                if dep_name not in visited:
+                    visited.add(dep_name)
+                    queue.append((dep_name, path + [dep_name]))
         
-        return None
+        return None      
     
     @classmethod
-    def from_dependency_dict(cls, dependencies: Dict[str, List[str]]) -> 'DependencyGraph':
+    def from_dependency_dict(cls, dependencies: Dict[str, List[Dict]]) -> 'DependencyGraph':
         """Create a dependency graph from a dependency dictionary.
         
         Args:
-            dependencies (Dict[str, List[str]]): Dictionary mapping package names
+            dependencies (Dict[str, List[Dict]]): Dictionary mapping package names
                 to their direct dependencies.
                 
         Returns:
@@ -239,9 +262,53 @@ class DependencyGraph:
             package (str): Package name to get dependencies for.
             
         Returns:
-            List[str]: List of direct dependencies.
+            List[str]: List of direct dependency names.
+        """
+        deps = self.adjacency_list.get(package, [])
+        return [self._get_dependency_name(dep) for dep in deps]    
+    
+    def get_direct_dependency_objects(self, package: str) -> List[Dict]:
+        """Get direct dependency objects of a package.
+        
+        Args:
+            package (str): Package name to get dependencies for.
+            
+        Returns:
+            List[Dict]: List of direct dependency objects.
         """
         return self.adjacency_list.get(package, []).copy()
+    
+    def get_install_order_dependencies(self) -> List[Dict]:
+        """Return install-ready dependency objects in topological order.
+        
+        Returns a list of unique dependency objects in the order they should be installed,
+        with duplicates removed (keeping the first occurrence).
+        
+        Returns:
+            List[Dict]: List of dependency objects with keys: name, version_constraint, resolved_version.
+            
+        Raises:
+            DependencyGraphError: If the dependency graph contains cycles.
+        """
+        ok, order = self.topological_sort()
+        if not ok:
+            raise DependencyGraphError("Dependency graph contains cycles")
+        
+        # Collect all dependency objects in install order
+        seen = set()
+        result = []
+        
+        for pkg in order:
+            for dep in self.adjacency_list.get(pkg, []):
+                dep_name = dep.get("name")
+                resolved_version = dep.get("resolved_version")
+                # Use (name, resolved_version) as unique key
+                dep_key = (dep_name, resolved_version)
+                if dep_key not in seen:
+                    seen.add(dep_key)
+                    result.append(dep)
+        
+        return result
     
     def get_all_dependencies(self, package: str) -> Set[str]:
         """Get all transitive dependencies of a package.
@@ -266,11 +333,11 @@ class DependencyGraph:
             current = stack.pop()
             if current in visited:
                 continue
-            visited.add(current)
-            
+            visited.add(current)            
             for dep in self.adjacency_list.get(current, []):
-                if dep not in visited:
-                    stack.append(dep)
+                dep_name = self._get_dependency_name(dep)
+                if dep_name not in visited:
+                    stack.append(dep_name)
         
         # Remove the starting package from the result
         visited.discard(package)

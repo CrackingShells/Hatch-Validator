@@ -72,21 +72,34 @@ class HatchDependencyGraphBuilder:
         pkg_name, _ = context.get_data("pending_update", ("current_package", None))
         logger.debug(f"Building dependency graph for package: {pkg_name}")
         graph.add_package(pkg_name)
+        
         processed = set()
         for dep in hatch_dependencies:
             if self.package_service.is_local_dependency(dep, context.package_dir):
-
-                dep_pkg_metadata = self._get_local_dep_pkg_metadata(dep, context.package_dir)
-                dep_pkg_service = PackageService(dep_pkg_metadata)
-
-                graph.add_dependency(pkg_name, dep_pkg_service.get_field('name'))
-                self._add_local_dependency_graph(dep, graph, context, context.package_dir)
+                self._add_local_dependency_graph(pkg_name, dep, graph, context, context.package_dir)
 
             else:
-                dep_name = dep.get('name')
-                graph.add_dependency(pkg_name, dep_name)
-                self._add_remote_dependency_graph(dep, graph, context, processed)
+                self._add_remote_dependency_graph(pkg_name, dep, graph, context, processed)
         return graph
+
+    def get_install_ready_dependencies(self, context: ValidationContext) -> List[Dict]:
+        """Get install-ready Hatch dependencies in topological order.
+        
+        This method builds the dependency graph and returns a list of dependency objects
+        in the order they should be installed, with resolved versions.
+        
+        Args:
+            context (ValidationContext): Validation context containing package information.
+            
+        Returns:
+            List[Dict]: List of dependency objects with keys: name, version_constraint, resolved_version.
+            
+        Raises:
+            ValidationError: If there are validation errors during graph construction.
+            DependencyGraphError: If the dependency graph contains cycles.
+        """
+        graph = self.build_dependency_graph(context)
+        return graph.get_install_order_dependencies()
 
     def _get_local_dependency_path(self, dep: Dict, root_dir: Optional[Path] = None) -> Path:
         """Get the local file path for a local dependency.
@@ -115,10 +128,11 @@ class HatchDependencyGraphBuilder:
         
         return path
 
-    def _add_local_dependency_graph(self, dep: Dict, graph: DependencyGraph, context: ValidationContext, root_dir: Optional[Path] = None):
+    def _add_local_dependency_graph(self, parent_pkg_name: str, dep: Dict, graph: DependencyGraph, context: ValidationContext, root_dir: Optional[Path] = None):
         """Add local dependency and its transitive dependencies to the graph.
 
         Args:
+            parent_pkg_name (str): Name of the parent package
             dep (Dict): Local dependency definition
             graph (DependencyGraph): Graph to add dependencies to
             context (ValidationContext): Validation context
@@ -129,30 +143,36 @@ class HatchDependencyGraphBuilder:
             local_pkg_metadata = self._get_local_dep_pkg_metadata(dep, root_dir)
             local_pkg_service = PackageService(local_pkg_metadata)
             local_pkg_name = local_pkg_service.get_field('name')
+
+            remote_dep_obj = {
+                    "name": local_pkg_name,
+                    "version_constraint": dep.get('version_constraint'),
+                    "resolved_version": local_pkg_service.get_field('version')  # For local deps, use actual version
+                }
+            graph.add_dependency(parent_pkg_name, remote_dep_obj)
+
             deps_obj = local_pkg_service.get_dependencies()
             hatch_deps = deps_obj.get('hatch', [])
 
             path = self._get_local_dependency_path(dep, root_dir)
             for dep in hatch_deps:
-                dep_name = dep.get('name')
-                graph.add_dependency(local_pkg_name, dep_name)
                 if self.package_service.is_local_dependency(dep, path):
-                    self._add_local_dependency_graph(dep, graph, context, path)
-
+                    self._add_local_dependency_graph(local_pkg_name, dep, graph, context, path)
                 else:
-                    self._add_remote_dependency_graph(dep, graph, context)
+                    self._add_remote_dependency_graph(local_pkg_name, dep, graph, context)
 
         except Exception as e:
             logger.error(f"Could not load metadata for local dependency '{local_pkg_name}': {e}")
             raise ValidationError(f"Could not load metadata for local dependency '{local_pkg_name}': {e}")
 
-    def _add_remote_dependency_graph(self, dep: Dict, graph: DependencyGraph, context: ValidationContext, processed: Set[str] = None):
+    def _add_remote_dependency_graph(self, parent_pkg_name: str, dep: Dict, graph: DependencyGraph, context: ValidationContext, processed: Set[str] = None):
         """Add remote dependency and its transitive dependencies to the graph.
 
         This method uses the registry to fetch the complete dependency information
         for a remote package, handling the differential storage format.
 
         Args:
+            parent_pkg_name (str): Name of the parent package
             dep (Dict): Remote dependency definition
             graph (DependencyGraph): Graph to add dependencies to
             context (ValidationContext): Validation context
@@ -167,30 +187,27 @@ class HatchDependencyGraphBuilder:
         
         processed.add(dep_name)
         try:
-            if not self.registry_service:
-                logger.error(f"No registry service available. Cannot process remote dependency '{dep_name}'")
-                raise RegistryError(f"No registry service available for remote dependency '{dep_name}'")
-            
-            if not self.registry_service.is_loaded():
-                logger.error(f"Registry data not loaded. Cannot process remote dependency '{dep_name}'")
-                raise RegistryError(f"Registry data not loaded. Cannot process remote dependency '{dep_name}'")
             
             version_constraint = dep.get('version_constraint')
             compatible_version = self.registry_service.find_compatible_version(dep_name, version_constraint)
-            if not compatible_version:
-                logger.error(f"No compatible version found for remote dependency '{dep_name}' with constraint '{version_constraint}'")
-                raise ValidationError(f"No compatible version found for remote dependency '{dep_name}' with constraint '{version_constraint}'")
-            
+
+            # Create rich dependency object
+            remote_dep_obj = {
+                "name": dep_name,
+                "version_constraint": version_constraint,
+                "resolved_version": compatible_version
+            }
+            graph.add_dependency(parent_pkg_name, remote_dep_obj)
+
             hatch_deps_obj = self.registry_service.get_package_dependencies(dep_name, compatible_version)
             hatch_deps = hatch_deps_obj.get('dependencies', [])
 
             for remote_dep in hatch_deps:
 
                 remote_dep_name = remote_dep.get('name')
-                graph.add_dependency(dep_name, remote_dep_name)
 
                 if remote_dep_name not in processed:
-                    self._add_remote_dependency_graph(remote_dep, graph, context, processed)
+                    self._add_remote_dependency_graph(dep_name, remote_dep, graph, context, processed)
 
         except Exception as e:
             logger.error(f"Error processing remote dependency '{dep_name}': {e}")
