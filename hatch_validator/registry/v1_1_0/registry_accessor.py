@@ -32,16 +32,20 @@ class RegistryAccessor(RegistryAccessorBase):
         """
         return registry_data.get('registry_schema_version', 'unknown')
     
-    def get_all_package_names(self, registry_data: Dict[str, Any]) -> List[str]:
-        """Get all package names from all repositories in the registry data.
+    def get_all_package_names(self, registry_data: Dict[str, Any], repo_name: Optional[str] = None) -> List[str]:
+        """Get all package names from all repositories or a specific repository in the registry data.
 
         Args:
             registry_data (Dict[str, Any]): Registry data.
+            repo_name (str, optional): Repository name. If None, returns all packages across all repositories.
         Returns:
             List[str]: List of package names.
         """
         package_names = []
-        for repo in registry_data.get('repositories', []):
+        repos = registry_data.get('repositories', [])
+        for repo in repos:
+            if repo_name and repo.get('name') != repo_name:
+                continue
             for package in repo.get('packages', []):
                 name = package.get('name')
                 if name:
@@ -60,7 +64,7 @@ class RegistryAccessor(RegistryAccessorBase):
         """
         if repo_name:
             return package_name in self.list_packages(registry_data, repo_name)
-        return package_name in self.get_all_package_names(registry_data)
+        return package_name in self.get_all_package_names(registry_data, repo_name=None)
 
     def get_package_versions(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> List[str]:
         """Get all versions for a package, optionally in a specific repo.
@@ -100,8 +104,31 @@ class RegistryAccessor(RegistryAccessorBase):
                     return pkg
         return {}
 
-    def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None) -> Dict[str, Any]:
-        """Get reconstructed dependencies for a specific package version.
+    def get_package_version_info(self, registry_data: Dict[str, Any], package_name: str, version: str, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get metadata for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str): Specific version to retrieve.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+
+        Returns:
+            Dict[str, Any]: Package metadata for the specified version.
+        """
+        package_data = self.get_package_metadata(registry_data, package_name, repo_name)
+        if not package_data:
+            return {}
+        
+        versions = package_data.get('versions', [])
+        for v in versions:
+            if v.get('version') == version:
+                return v
+        
+        return {}
+
+    def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get reconstructed HATCH dependencies for a specific package version.
         
         This method reconstructs the complete dependency information from the differential
         storage format used in the registry.
@@ -110,12 +137,12 @@ class RegistryAccessor(RegistryAccessorBase):
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name.
             version (str, optional): Specific version. If None, uses latest version.
-            
+            repo_name (str, optional): Repository name. If None, uses default repository.
         Returns:
             Dict[str, Any]: Reconstructed package metadata with complete dependency information.
-                Contains keys: name, version, hatch_dependencies, python_dependencies, compatibility
+                Contains keys: name, version, dependencies (hatch)
         """
-        package_data = self.get_package_metadata(registry_data, package_name)
+        package_data = self.get_package_metadata(registry_data, package_name, repo_name)
         if not package_data:
             return {}
         
@@ -151,93 +178,73 @@ class RegistryAccessor(RegistryAccessorBase):
             
         Returns:
             Dict[str, Any]: Reconstructed package metadata including dependencies and compatibility.
+                - Contains keys: name, version, dependencies (hatch)
         """
-        # Build version chain from current version back to the base
         version_chain = []
-        current_version = version_info
         package_versions = package.get("versions", [])
-        
-        while current_version:
-            version_chain.append(current_version)
-            base_version = current_version.get("base_version")
-            
-            if not base_version:
-                break
-                
-            # Find the base version
-            current_version = None
-            for ver in package_versions:
-                if ver.get("version") == base_version:
-                    current_version = ver
-                    break
         
         # Initialize with empty metadata
         reconstructed = {
             "name": package["name"],
             "version": version_info["version"],
-            "hatch_dependencies": [],
-            "python_dependencies": [],
-            "compatibility": {}
+            "dependencies": []
         }
         
         # Apply changes from oldest to newest (reverse the chain)
-        for ver in reversed(version_chain):
+        # Given that new versions are always appended to the end of the list during package updates,
+        # we can iterate from the start.
+        for ver in package_versions:
             # Process hatch dependencies
             # Add new dependencies
             for dep in ver.get("hatch_dependencies_added", []):
-                reconstructed["hatch_dependencies"].append(dep)
+                reconstructed["dependencies"].append(dep)
             
             # Remove dependencies
             for dep_name in ver.get("hatch_dependencies_removed", []):
-                reconstructed["hatch_dependencies"] = [
-                    d for d in reconstructed["hatch_dependencies"] 
+                reconstructed["dependencies"] = [
+                    d for d in reconstructed["dependencies"]
                     if d.get("name") != dep_name
                 ]
             
             # Modify dependencies
             for mod_dep in ver.get("hatch_dependencies_modified", []):
-                for i, dep in enumerate(reconstructed["hatch_dependencies"]):
+                for i, dep in enumerate(reconstructed["dependencies"]):
                     if dep.get("name") == mod_dep.get("name"):
-                        reconstructed["hatch_dependencies"][i] = mod_dep
+                        reconstructed["dependencies"][i] = mod_dep
                         break
-            
-            # Process Python dependencies
-            # Add new dependencies
-            for dep in ver.get("python_dependencies_added", []):
-                reconstructed["python_dependencies"].append(dep)
-            
-            # Remove dependencies
-            for dep_name in ver.get("python_dependencies_removed", []):
-                reconstructed["python_dependencies"] = [
-                    d for d in reconstructed["python_dependencies"] 
-                    if d.get("name") != dep_name
-                ]
-            
-            # Modify dependencies
-            for mod_dep in ver.get("python_dependencies_modified", []):
-                for i, dep in enumerate(reconstructed["python_dependencies"]):
-                    if dep.get("name") == mod_dep.get("name"):
-                        reconstructed["python_dependencies"][i] = mod_dep
-                        break
-            
-            # Process compatibility info
-            for key, value in ver.get("compatibility_changes", {}).items():
-                reconstructed["compatibility"][key] = value
         
         return reconstructed
-    
-    def find_compatible_version(self, registry_data: Dict[str, Any], package_name: str, version_constraint: str = None) -> Optional[str]:
+
+    def get_package_uri(self, registry_data: Dict[str, Any], package_name: str, version: str = None, repo_name: Optional[str] = None) -> Optional[str]:
+        """Get the URI for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str, optional): Package version. If None, uses latest version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+            
+        Returns:
+            Optional[str]: URI for the package version, or None if not found.
+        """
+        package_version_data = self.get_package_version_info(registry_data, package_name, version, repo_name)
+        if not package_version_data:
+            return None
+
+        return package_version_data.get('release_uri')
+
+    def find_compatible_version(self, registry_data: Dict[str, Any], package_name: str, version_constraint: str = None, repo_name: Optional[str] = None) -> Optional[str]:
         """Find a compatible version for a package given a version constraint.
         
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name.
             version_constraint (str, optional): Version constraint (e.g., '>=1.0.0').
-            
+            repo_name (str, optional): Repository name. If None, uses default repository.
         Returns:
             Optional[str]: Compatible version string, or None if not found.
         """
-        versions = self.get_package_versions(registry_data, package_name)
+        versions = self.get_package_versions(registry_data, package_name, repo_name)
         if not versions:
             return None
 

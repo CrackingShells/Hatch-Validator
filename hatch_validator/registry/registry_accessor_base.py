@@ -46,51 +46,55 @@ class RegistryAccessorBase(ABC):
         pass
     
     @abstractmethod
-    def get_all_package_names(self, registry_data: Dict[str, Any]) -> List[str]:
+    def get_all_package_names(self, registry_data: Dict[str, Any], repo_name: Optional[str] = None) -> List[str]:
         """Get all package names from registry data.
-        
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
-            
+            repo_name (str, optional): Repository name. If None, returns all packages across all repositories.
+
         Returns:
             List[str]: List of package names.
         """
         pass
     
     @abstractmethod
-    def package_exists(self, registry_data: Dict[str, Any], package_name: str) -> bool:
+    def package_exists(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> bool:
         """Check if a package exists in the registry.
-        
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name to check.
-            
+            repo_name (str, optional): Repository name. If None, uses default repository.
+
         Returns:
             bool: True if package exists.
         """
         pass
     
     @abstractmethod
-    def get_package_versions(self, registry_data: Dict[str, Any], package_name: str) -> List[str]:
+    def get_package_versions(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> List[str]:
         """Get all versions for a package.
-        
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name.
-            
+            repo_name (str, optional): Repository name. If None, uses default repository.
+
         Returns:
             List[str]: List of version strings.
         """
         pass
     
     @abstractmethod
-    def get_package_metadata(self, registry_data: Dict[str, Any], package_name: str) -> Dict[str, Any]:
+    def get_package_metadata(self, registry_data: Dict[str, Any], package_name: str, repo_name: Optional[str] = None) -> Dict[str, Any]:
         """Get metadata for a package.
-        
+
         Args:
             registry_data (Dict[str, Any]): Registry data.
             package_name (str): Package name.
-            
+            repo_name (str, optional): Repository name. If None, uses default repository.
+
         Returns:
             Dict[str, Any]: Package metadata.
         """
@@ -106,6 +110,55 @@ class RegistryAccessorBase(ABC):
             package_name (str): Package name.
         Returns:
             Optional[Dict[str, Any]]: Package metadata or None if not found.
+        """
+        pass
+
+    @abstractmethod
+    def get_package_dependencies(self, registry_data: Dict[str, Any], package_name: str, version: str = None, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get reconstructed HATCH dependencies for a specific package version.
+        
+        This method reconstructs the complete dependency information from the differential
+        storage format used in the registry.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str, optional): Specific version. If None, uses latest version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+
+        Returns:
+            Dict[str, Any]: Reconstructed package metadata with complete dependency information.
+                Contains keys: name, version, dependencies (hatch)
+        """
+        pass
+
+    @abstractmethod
+    def get_package_version_info(self, registry_data: Dict[str, Any], package_name: str, version: str, repo_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get metadata for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str): Package version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+        
+        Returns:
+            Dict[str, Any]: Metadata for the package version.
+        """
+        pass
+
+    @abstractmethod
+    def get_package_uri(self, registry_data: Dict[str, Any], package_name: str, version: str, repo_name: Optional[str] = None) -> str:
+        """Get the URI for a specific package version.
+        
+        Args:
+            registry_data (Dict[str, Any]): Registry data.
+            package_name (str): Package name.
+            version (str): Package version.
+            repo_name (str, optional): Repository name. If None, uses default repository.
+        
+        Returns:
+            str: URI for the package version.
         """
         pass
 

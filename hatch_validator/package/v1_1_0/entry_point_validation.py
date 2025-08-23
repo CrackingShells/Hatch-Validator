@@ -3,6 +3,7 @@ from typing import Dict, List, Tuple
 
 from hatch_validator.core.validation_strategy import EntryPointValidationStrategy
 from hatch_validator.core.validation_context import ValidationContext
+from hatch_validator.package.package_service import PackageService
 
 logger = logging.getLogger("hatch_validator.schemas.v1_1_0.entry_point_validation")
 logger.setLevel(logging.INFO)
@@ -22,7 +23,11 @@ class EntryPointValidation(EntryPointValidationStrategy):
                 - bool: Whether entry point validation was successful
                 - List[str]: List of entry point validation errors
         """
-        entry_point = metadata.get('entry_point')
+        # Use PackageService from context
+        package_service = context.get_data("package_service", None)
+        if package_service is None:
+            package_service = PackageService(metadata)
+        entry_point = package_service.get_entry_point()
         if not entry_point:
             logger.error("No entry_point specified in metadata")
             return False, ["No entry_point specified in metadata"]

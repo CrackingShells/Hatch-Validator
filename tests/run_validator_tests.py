@@ -78,6 +78,16 @@ def configure_parser():
         help="Run only v1.1.0 dependency validation tests"
     )
     test_type.add_argument(
+        "--package-service-only",
+        action="store_true",
+        help="Run only package service and accessor tests"
+    )
+    test_type.add_argument(
+        "--registry-service-only",
+        action="store_true",
+        help="Run only RegistryService accessor tests"
+    )
+    test_type.add_argument(
         "--all",
         action="store_true",
         help="Run all tests explicitly"
@@ -143,13 +153,19 @@ def run_tests(args):
         test_suite = test_loader.loadTestsFromName("test_schema_validators")
     elif args.dependency_graph_only:
         logger.info("Running dependency graph utility tests only...")
-        test_suite = test_loader.loadTestsFromName("test_dependency_graph.TestDependencyGraph")
+        test_suite = test_loader.loadTestsFromName("test_dependency_graph")
     elif args.version_utils_only:
         logger.info("Running version constraint utility tests only...")
         test_suite = test_loader.loadTestsFromName("test_version_utils")
     elif args.dependency_v1_1_0_only:
         logger.info("Running v1.1.0 dependency validation tests only...")
         test_suite = test_loader.loadTestsFromName("test_dependency_validation_v1_1_0")
+    elif args.package_service_only:
+        logger.info("Running package service and accessor tests only...")
+        test_suite = test_loader.loadTestsFromName("test_package_service.TestPackageService")
+    elif args.registry_service_only:
+        logger.info("Running RegistryService accessor tests only...")
+        test_suite = test_loader.loadTestsFromName("test_registry_service.TestRegistryServiceV110")
     elif args.all:
         # Run all tests explicitly
         logger.info("Running all Hatch-Validator tests...")

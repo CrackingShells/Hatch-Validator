@@ -3,18 +3,20 @@
 This module implements dependency validation using the decoupled utility modules
 for graph operations, version constraints, and registry interactions.
 """
-
+import json
 import logging
 from typing import Dict, List, Tuple, Optional, Set
 from pathlib import Path
 
-from hatch_validator.core.validation_strategy import DependencyValidationStrategy
+from hatch_validator.core.validation_strategy import DependencyValidationStrategy, ValidationError
 from hatch_validator.core.validation_context import ValidationContext
-from hatch_validator.utils.dependency_graph import DependencyGraph
+from hatch_validator.utils.hatch_dependency_graph import HatchDependencyGraphBuilder
 from hatch_validator.utils.version_utils import VersionConstraintValidator
-from hatch_validator.registry.registry_service import RegistryService
+from hatch_validator.registry.registry_service import RegistryService, RegistryError
+from hatch_validator.package.package_service import PackageService
 
 logger = logging.getLogger("hatch.dependency_validation_v1_1_0")
+logger.setLevel(logging.INFO)
 
 
 class DependencyValidation(DependencyValidationStrategy):
@@ -45,6 +47,15 @@ class DependencyValidation(DependencyValidationStrategy):
             Tuple[bool, List[str]]: Tuple containing:
                 - bool: Whether dependency validation was successful
                 - List[str]: List of dependency validation errors        """
+        # Initialize package service from the context if available
+        package_service = context.get_data("package_service", None)
+        if package_service is None:
+            # Create a package service with the provided metadata
+            package_service = PackageService(metadata)
+
+        # Store package service for use in helper methods
+        self.package_service = package_service
+        
         # Initialize registry service from the context if available
         # Get registry data from context
         registry_data = context.registry_data
@@ -65,16 +76,17 @@ class DependencyValidation(DependencyValidationStrategy):
         errors = []
         is_valid = True
         
-        # Get dependencies from v1.1.0 format
-        hatch_dependencies = metadata.get('hatch_dependencies', [])
-        python_dependencies = metadata.get('python_dependencies', [])
+        
+        # Use package_service for all metadata access
+        deps = package_service.get_dependencies()
+        hatch_dependencies = deps.get('hatch', [])
+        python_dependencies = deps.get('python', [])
         
         logger.debug(f"Validating v1.1.0 dependencies - Hatch: {len(hatch_dependencies)}, Python: {len(python_dependencies)}")
         
         # Early check for local dependencies if they're not allowed
         if not context.allow_local_dependencies:
-            local_deps = [dep for dep in hatch_dependencies 
-                         if dep.get('type', {}).get('type') == 'local']
+            local_deps = [dep for dep in hatch_dependencies if package_service.is_local_dependency(dep)]
             if local_deps:
                 for dep in local_deps:
                     logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")
@@ -125,7 +137,11 @@ class DependencyValidation(DependencyValidationStrategy):
         
         # Step 2: Build dependency graph and check for cycles
         try:
-            dependency_graph = self._build_dependency_graph(hatch_dependencies, context)
+            hatch_dep_graph_builder = HatchDependencyGraphBuilder(
+                package_service=self.package_service,
+                registry_service=self.registry_service
+            )
+            dependency_graph = hatch_dep_graph_builder.build_dependency_graph(hatch_dependencies, context)
             has_cycles, cycles = dependency_graph.detect_cycles()
             
             if has_cycles:
@@ -170,23 +186,16 @@ class DependencyValidation(DependencyValidationStrategy):
                 errors.append(f"Invalid version constraint for '{dep_name}': {constraint_error}")
                 is_valid = False
         
-        # Validate dependency type
-        dep_type = dep.get('type', {})
-        type_name = dep_type.get('type')
-        
-        if type_name == 'local':
+        if self.package_service.is_local_dependency(dep):
             local_valid, local_errors = self._validate_local_dependency(dep, context)
             if not local_valid:
                 errors.extend(local_errors)
                 is_valid = False
-        elif type_name == 'remote' or type_name is None:  # Default to registry
+        else:
             registry_valid, registry_errors = self._validate_registry_dependency(dep, context)
             if not registry_valid:
                 errors.extend(registry_errors)
                 is_valid = False
-        else:
-            errors.append(f"Unknown dependency type for '{dep_name}': {type_name}")
-            is_valid = False
         
         return is_valid, errors
     
@@ -269,158 +278,6 @@ class DependencyValidation(DependencyValidationStrategy):
                 is_valid = False
         
         return is_valid, errors
-    
-    def _build_dependency_graph(self, hatch_dependencies: List[Dict], 
-                              context: ValidationContext) -> DependencyGraph:
-        """Build a dependency graph from Hatch dependencies.
-        
-        This method builds a complete dependency graph including all transitive dependencies
-        for both local and remote packages, similar to the legacy implementation.
-        
-        Args:
-            hatch_dependencies (List[Dict]): List of Hatch dependency definitions
-            context (ValidationContext): Validation context
-            
-        Returns:
-            DependencyGraph: Constructed dependency graph
-        """
-        graph = DependencyGraph()
-        
-        # Get the current package name if available
-        pkg_name, _ = context.get_data("pending_update", ("current_package", None))
-                
-        # Add current package to graph
-        graph.add_package(pkg_name)
-        
-        # Track processed dependencies to avoid infinite recursion
-        processed = set()
-        
-        # Add dependencies and their transitive dependencies
-        for dep in hatch_dependencies:
-            dep_name = dep.get('name')
-            if dep_name:
-                graph.add_dependency(pkg_name, dep_name)
-                
-                # Add transitive dependencies based on dependency type
-                dep_type = dep.get('type', {})
-                if dep_type.get('type') == 'local':
-                    self._add_local_dependency_graph(dep, graph, context)
-                else:
-                    # Handle remote dependencies (default type)
-                    self._add_remote_dependency_graph(dep, graph, context, processed)
-        
-        return graph
-    
-    def _add_local_dependency_graph(self, dep: Dict, graph: DependencyGraph, 
-                                   context: ValidationContext) -> None:
-        """Add local dependency and its transitive dependencies to the graph.
-        
-        Args:
-            dep (Dict): Local dependency definition
-            graph (DependencyGraph): Graph to add dependencies to
-            context (ValidationContext): Validation context
-        """
-        dep_name = dep.get('name')
-        dep_type = dep.get('type', {})
-        uri = dep_type.get('uri')
-        
-        if not uri or not uri.startswith('file://'):
-            return
-        
-        # Extract path
-        path_str = uri[7:]  # Remove "file://"
-        path = Path(path_str)
-        
-        # Resolve relative paths
-        if context.package_dir and not path.is_absolute():
-            path = context.package_dir / path
-        
-        # Load metadata if available
-        metadata_path = path / "hatch_metadata.json"
-        if metadata_path.exists():
-            try:
-                import json
-                with open(metadata_path, 'r') as f:
-                    local_metadata = json.load(f)
-                
-                # Add transitive dependencies
-                local_hatch_deps = local_metadata.get('hatch_dependencies', [])
-                for local_dep in local_hatch_deps:
-                    local_dep_name = local_dep.get('name')
-                    if local_dep_name:
-                        graph.add_dependency(dep_name, local_dep_name)
-                        
-                        # Recursively add if it's also local
-                        local_dep_type = local_dep.get('type', {})
-                        if local_dep_type.get('type') == 'local':
-                            self._add_local_dependency_graph(local_dep, graph, context)
-                            
-            except Exception as e:
-                logger.error(f"Could not load metadata for local dependency '{dep_name}': {e}")
-                raise 
-    
-    def _add_remote_dependency_graph(self, dep: Dict, graph: DependencyGraph, 
-                                    context: ValidationContext, processed: Set[str] = None) -> None:
-        """Add remote dependency and its transitive dependencies to the graph.
-        
-        This method uses the registry to fetch the complete dependency information
-        for a remote package, handling the differential storage format.
-        
-        Args:
-            dep (Dict): Remote dependency definition
-            graph (DependencyGraph): Graph to add dependencies to
-            context (ValidationContext): Validation context
-            processed (Set[str], optional): Set of already processed dependencies to avoid cycles
-        """
-        if processed is None:
-            processed = set()
-            
-        dep_name = dep.get('name')
-        if not dep_name or dep_name in processed:
-            return
-            
-        processed.add(dep_name)
-        try:
-            # Use registry service if available
-            if not self.registry_service:
-                logger.warning(f"No registry service available for remote dependency '{dep_name}'")
-                return
-            
-            if not self.registry_service.is_loaded():
-                logger.error(f"Registry service not loaded for remote dependency '{dep_name}'")
-                return
-            
-            # Find compatible version using registry service
-            version_constraint = dep.get('version_constraint')
-            compatible_version = self.registry_service.find_compatible_version(dep_name, version_constraint)
-            
-            if not compatible_version:
-                logger.warning(f"No compatible version found for remote dependency '{dep_name}' with constraint '{version_constraint}'")
-                return
-            
-            # Get reconstructed package dependencies
-            package_metadata = self.registry_service.get_package_dependencies(dep_name, compatible_version)
-            
-            # Add transitive hatch dependencies to the graph
-            remote_hatch_deps = package_metadata.get('hatch_dependencies', [])
-            for remote_dep in remote_hatch_deps:
-                remote_dep_name = remote_dep.get('name')
-                if remote_dep_name:
-                    graph.add_dependency(dep_name, remote_dep_name)
-                    
-                    # Recursively add transitive dependencies if not already processed
-                    if remote_dep_name not in processed:
-                        # Determine if this is a local or remote dependency
-                        remote_dep_type = remote_dep.get('type', {})
-                        if remote_dep_type.get('type') == 'local':
-                            self._add_local_dependency_graph(remote_dep, graph, context)
-                        else:
-                            # Recursively process remote dependencies
-                            self._add_remote_dependency_graph(remote_dep, graph, context, processed)
-                            
-        except Exception as e:
-            logger.warning(f"Error processing remote dependency '{dep_name}': {e}")
-            # Continue processing other dependencies even if this one fails
     
     def _validate_python_dependencies(self, python_dependencies: List[Dict]) -> Tuple[bool, List[str]]:
         """Validate Python package dependencies format.
