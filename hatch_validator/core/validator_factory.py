@@ -66,6 +66,12 @@ class ValidatorFactory:
                 cls.register_validator("1.2.0", V120Validator)
             except ImportError as e:
                 logger.warning(f"Could not load v1.2.0 validator: {e}")
+
+            try:
+                from hatch_validator.package.v1_2_1.validator import Validator as V121Validator
+                cls.register_validator("1.2.1", V121Validator)
+            except ImportError as e:
+                logger.warning(f"Could not load v1.2.1 validator: {e}")
     
     @classmethod
     def create_validator_chain(cls, target_version: Optional[str] = None) -> Validator:

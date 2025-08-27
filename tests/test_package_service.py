@@ -63,6 +63,37 @@ DUMMY_METADATA_V120 = {
     "citations": {"origin": "", "mcp": ""}
 }
 
+# Dummy package metadata for v1.2.1
+DUMMY_METADATA_V121 = {
+    "package_schema_version": "1.2.1",
+    "name": "dummy_pkg_v121",
+    "version": "0.3.0",
+    "description": "A dummy package for v1.2.1 schema.",
+    "tags": ["test", "dummy"],
+    "author": {"name": "Dave", "email": "dave@example.com"},
+    "contributors": [{"name": "Eve"}],
+    "license": {"name": "MIT"},
+    "repository": "https://example.com/repo3",
+    "documentation": "https://example.com/docs3",
+    "dependencies": {
+        "hatch": [
+            {"name": "base_pkg_3", "version_constraint": ">=3.0.0"}
+        ],
+        "python": [
+            {"name": "fastapi", "version_constraint": ">=0.68.0", "package_manager": "pip"}
+        ],
+        "system": [],
+        "docker": []
+    },
+    "compatibility": {"hatchling": ">=0.3.0", "python": ">=3.9"},
+    "entry_point": {
+        "mcp_server": "mcp_server.py",
+        "hatch_mcp_server": "hatch_mcp_server.py"
+    },
+    "tools": [{"name": "tool3", "description": "A dual entry point tool"}],
+    "citations": {"origin": "", "mcp": ""}
+}
+
 class TestPackageService(unittest.TestCase):
     """Tests for the PackageService and concrete package accessors."""
 
@@ -99,6 +130,55 @@ class TestPackageService(unittest.TestCase):
         self.assertEqual(deps["python"][0]["name"], "numpy")
         self.assertEqual(deps["system"][0]["name"], "libssl")
         self.assertEqual(deps["docker"][0]["name"], "ubuntu")
+
+    def test_v121_fields(self):
+        """Test all top-level fields for v1.2.1 dummy package."""
+        service = PackageService(DUMMY_METADATA_V121)
+        self.assertTrue(service.is_loaded())
+
+        # Test basic fields (delegated to v1.2.0)
+        self.assertEqual(service.get_field("name"), "dummy_pkg_v121")
+        self.assertEqual(service.get_field("version"), "0.3.0")
+        self.assertEqual(service.get_field("author")["name"], "Dave")
+
+        # Test dual entry point access (v1.2.1 specific)
+        entry_point = service.get_entry_point()
+        self.assertIsInstance(entry_point, dict)
+        self.assertEqual(entry_point["mcp_server"], "mcp_server.py")
+        self.assertEqual(entry_point["hatch_mcp_server"], "hatch_mcp_server.py")
+
+        # Test dependencies (delegated to v1.2.0)
+        deps = service.get_dependencies()
+        self.assertIn("hatch", deps)
+        self.assertIn("python", deps)
+        self.assertIn("system", deps)
+        self.assertIn("docker", deps)
+        self.assertEqual(deps["hatch"][0]["name"], "base_pkg_3")
+        self.assertEqual(deps["python"][0]["name"], "fastapi")
+
+        # Test tools (delegated to v1.2.0)
+        tools = service.get_tools()
+        self.assertEqual(tools[0]["name"], "tool3")
+
+    def test_version_routing(self):
+        """Test that PackageService routes to correct accessor based on schema version."""
+        # Test v1.1.0 routing
+        service_v110 = PackageService(DUMMY_METADATA_V110)
+        self.assertTrue(service_v110.is_loaded())
+        entry_point_v110 = service_v110.get_entry_point()
+        self.assertIsInstance(entry_point_v110, str)
+
+        # Test v1.2.0 routing
+        service_v120 = PackageService(DUMMY_METADATA_V120)
+        self.assertTrue(service_v120.is_loaded())
+        entry_point_v120 = service_v120.get_entry_point()
+        self.assertIsInstance(entry_point_v120, str)
+
+        # Test v1.2.1 routing
+        service_v121 = PackageService(DUMMY_METADATA_V121)
+        self.assertTrue(service_v121.is_loaded())
+        entry_point_v121 = service_v121.get_entry_point()
+        self.assertIsInstance(entry_point_v121, dict)
 
 if __name__ == "__main__":
     unittest.main()
