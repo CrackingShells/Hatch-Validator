@@ -101,6 +101,43 @@ class HatchPkgAccessor(ABC):
             return self.next_accessor.get_entry_point(metadata)
         raise NotImplementedError("Entry point accessor not implemented for this schema version")
 
+    def get_mcp_entry_point(self, metadata: Dict[str, Any]) -> Any:
+        """Get MCP entry point from metadata.
+
+        Default behavior: delegate to next accessor in chain if available.
+
+        Args:
+            metadata (Dict[str, Any]): Package metadata
+
+        Returns:
+            Any: MCP entry point value
+
+        Raises:
+            NotImplementedError: If there is no next accessor and this method is not overridden
+        """
+        if self.next_accessor:
+            return self.next_accessor.get_mcp_entry_point(metadata)
+        raise NotImplementedError("MCP entry point accessor not implemented for this schema version"
+                                  )
+
+    def get_hatch_mcp_entry_point(self, metadata: Dict[str, Any]) -> Any:
+        """Get Hatch MCP entry point from metadata.
+
+        Default behavior: delegate to next accessor in chain if available.
+
+        Args:
+            metadata (Dict[str, Any]): Package metadata
+
+        Returns:
+            Any: Hatch MCP entry point value
+
+        Raises:
+            NotImplementedError: If there is no next accessor and this method is not overridden
+        """
+        if self.next_accessor:
+            return self.next_accessor.get_hatch_mcp_entry_point(metadata)
+        raise NotImplementedError("Hatch MCP entry point accessor not implemented for this schema version")
+
     def get_tools(self, metadata: Dict[str, Any]) -> Any:
         """Get tools from metadata.
         

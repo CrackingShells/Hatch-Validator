@@ -46,6 +46,30 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
     def get_entry_point(self, metadata):
         return metadata.get('entry_point')
 
+    def get_mcp_entry_point(self, metadata):
+        """Until v1.2.1, MCP entry point is the same as the main entry point.
+        Hence, this is equivalent to calling get_entry_point().
+
+        Args:
+            metadata (dict): Package metadata
+
+        Returns:
+            Any: MCP entry point value
+        """
+        return self.get_entry_point(metadata)
+
+    def get_hatch_mcp_entry_point(self, metadata):
+        """For v1.2.1, Hatch MCP entry point is the same as the main entry point.
+        Hence, this is equivalent to calling get_entry_point().
+
+        Args:
+            metadata (dict): Package metadata
+
+        Returns:
+            Any: Hatch MCP entry point value
+        """
+        return self.get_entry_point(metadata)
+
     def get_tools(self, metadata):
         return metadata.get('tools', [])
 

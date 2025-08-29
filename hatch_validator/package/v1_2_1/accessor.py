@@ -30,25 +30,34 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
         return schema_version == "1.2.1"
     
     def get_entry_point(self, metadata):
-        """Get entry point from metadata for v1.2.1.
-        
-        Returns the dual entry point object containing both FastMCP server
-        and HatchMCP wrapper file paths.
-        
+        """From v1.2.1, returns the same as get_mcp_entry_point().
+
         Args:
             metadata (dict): Package metadata
-            
+
         Returns:
-            dict: Dual entry point object with keys:
-                - 'mcp_server': FastMCP server file path
-                - 'hatch_mcp_server': HatchMCP wrapper file path
-                
-        Example:
-            {
-                "mcp_server": "mcp_arithmetic.py",
-                "hatch_mcp_server": "hatch_mcp_arithmetic.py"
-            }
+            Any: Dual entry point value
         """
-        entry_point = metadata.get('entry_point')
-        logger.debug(f"Retrieved dual entry point: {entry_point}")
-        return entry_point
+        return metadata.get('entry_point').get('mcp_server')
+    
+    def get_mcp_entry_point(self, metadata):
+        """Get MCP entry point from metadata.
+
+        Args:
+            metadata (dict): Package metadata
+
+        Returns:
+            Any: MCP entry point value
+        """
+        return self.get_entry_point(metadata)
+
+    def get_hatch_mcp_entry_point(self, metadata):
+        """Get Hatch MCP entry point from metadata.
+
+        Args:
+            metadata (dict): Package metadata
+
+        Returns:
+            Any: Hatch MCP entry point value
+        """
+        return metadata.get('entry_point').get('hatch_mcp_server')
