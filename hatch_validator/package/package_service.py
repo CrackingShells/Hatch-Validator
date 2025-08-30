@@ -122,6 +122,32 @@ class PackageService:
             raise ValueError("Package metadata is not loaded.")
         return self._accessor.get_entry_point(self._metadata)
 
+    def get_mcp_entry_point(self) -> Any:
+        """Get the MCP entry point from the package metadata.
+
+        Returns:
+            Any: MCP entry point value.
+
+        Raises:
+            ValueError: If metadata is not loaded.
+        """
+        if not self.is_loaded():
+            raise ValueError("Package metadata is not loaded.")
+        return self._accessor.get_mcp_entry_point(self._metadata)
+
+    def get_hatch_mcp_entry_point(self) -> Any:
+        """Get the Hatch MCP entry point from the package metadata.
+
+        Returns:
+            Any: Hatch MCP entry point value.
+
+        Raises:
+            ValueError: If metadata is not loaded.
+        """
+        if not self.is_loaded():
+            raise ValueError("Package metadata is not loaded.")
+        return self._accessor.get_hatch_mcp_entry_point(self._metadata)
+
     def get_tools(self) -> Any:
         """Get the tools from the package metadata.
 
