@@ -1,0 +1,210 @@
+@startuml Version Agnostic Access
+!theme plain
+skinparam backgroundColor white
+skinparam participantBackgroundColor white
+skinparam participantBorderColor black
+skinparam arrowColor black
+
+title Version-Agnostic Access & Dual Pattern Validation Flow
+
+actor "Consumer\nApplication" as Consumer
+participant "PackageService" as PS
+participant "HatchPkgAccessorFactory" as PAF
+participant "V121PackageAccessor" as PA121
+participant "V120PackageAccessor" as PA120
+participant "V110PackageAccessor" as PA110
+participant "RegistryService" as RS
+participant "RegistryAccessorFactory" as RAF
+participant "V110RegistryAccessor" as RA110
+
+== Package Metadata Access (v1.2.1 Package) ==
+
+Consumer -> PS : PackageService(metadata)
+note right : metadata contains\npackage_schema_version: "1.2.1"
+
+PS -> PAF : create_accessor_chain("1.2.1")
+PAF -> PA121 : create V121PackageAccessor()
+PAF -> PA120 : create V120PackageAccessor()
+PAF -> PA110 : create V110PackageAccessor()
+PAF -> PA121 : set_next(PA120)
+PAF -> PA120 : set_next(PA110)
+PAF --> PS : return PA121 (chain head)
+
+Consumer -> PS : get_dependencies()
+PS -> PA121 : get_dependencies(metadata)
+
+alt v1.2.1 doesn't handle dependencies
+    PA121 -> PA120 : get_dependencies(metadata)
+    note right : Delegates to v1.2.0\nfor unified dependencies
+    PA120 --> PA121 : return unified dependencies
+end
+
+PA121 --> PS : return dependencies
+PS --> Consumer : return dependencies
+note left : Consumer receives unified\ndependency structure\nwithout knowing schema version
+
+== Entry Point Access (v1.2.1 Package) ==
+
+Consumer -> PS : get_entry_points()
+PS -> PA121 : get_entry_points(metadata)
+
+alt v1.2.1 handles dual entry points
+    PA121 -> PA121 : extract mcp_server and hatch_mcp_server
+    PA121 --> PS : return dual entry points
+end
+
+PS --> Consumer : return entry_points
+note left : Consumer receives dual\nentry point configuration\nspecific to v1.2.1
+
+== Registry Operations ==
+
+Consumer -> RS : RegistryService(registry_data)
+RS -> RAF : create_accessor_for_data(registry_data)
+RAF -> RA110 : create V110RegistryAccessor()
+RAF --> RS : return RA110
+
+Consumer -> RS : package_exists("example-package")
+RS -> RA110 : package_exists(registry_data, "example-package")
+RA110 -> RA110 : check CrackingShells registry format
+RA110 --> RS : return True/False
+RS --> Consumer : return exists
+
+== Alternative Flow: v1.2.0 Package ==
+
+Consumer -> PS : PackageService(v120_metadata)
+note right : metadata contains\npackage_schema_version: "1.2.0"
+
+PS -> PAF : create_accessor_chain("1.2.0")
+PAF -> PA120 : create V120PackageAccessor()
+PAF -> PA110 : create V110PackageAccessor()
+PAF -> PA120 : set_next(PA110)
+PAF --> PS : return PA120 (chain head)
+
+Consumer -> PS : get_dependencies()
+PS -> PA120 : get_dependencies(metadata)
+
+alt v1.2.0 handles unified dependencies
+    PA120 -> PA120 : extract unified dependencies
+    PA120 --> PS : return unified dependencies
+end
+
+PS --> Consumer : return dependencies
+note left : Same consumer code\nworks with v1.2.0\nand v1.2.1 packages
+
+== Alternative Flow: v1.1.0 Package ==
+
+Consumer -> PS : PackageService(v110_metadata)
+note right : metadata contains\npackage_schema_version: "1.1.0"
+
+PS -> PAF : create_accessor_chain("1.1.0")
+PAF -> PA110 : create V110PackageAccessor()
+PAF --> PS : return PA110 (terminal)
+
+Consumer -> PS : get_dependencies()
+PS -> PA110 : get_dependencies(metadata)
+
+alt v1.1.0 handles separate dependencies
+    PA110 -> PA110 : convert separate to unified format
+    note right : hatch_dependencies +\npython_dependencies →\nunified structure
+    PA110 --> PS : return unified dependencies
+end
+
+PS --> Consumer : return dependencies
+note left : Consumer receives\nsame unified format\nregardless of schema version
+
+== Error Handling Flow ==
+
+Consumer -> PS : get_unknown_field()
+PS -> PA121 : get_unknown_field(metadata)
+
+alt PA121 cannot handle
+    PA121 -> PA120 : get_unknown_field(metadata)
+    
+    alt PA120 cannot handle
+        PA120 -> PA110 : get_unknown_field(metadata)
+        
+        alt PA110 cannot handle (terminal)
+            PA110 --> PA120 : raise NotImplementedError
+        end
+        
+        PA120 --> PA121 : propagate error
+    end
+    
+    PA121 --> PS : propagate error
+end
+
+PS --> Consumer : raise NotImplementedError
+note left : Graceful error handling\nthrough delegation chain
+
+== Schema Version Detection ==
+
+Consumer -> PS : PackageService(metadata_without_version)
+note right : Legacy package without\nexplicit schema version
+
+PS -> PAF : create_accessor_chain(None)
+note right : None triggers\nlatest version chain
+
+PAF -> PA121 : create latest chain (v1.2.1)
+PAF --> PS : return PA121 chain
+
+Consumer -> PS : get_dependencies()
+PS -> PA121 : get_dependencies(metadata)
+
+alt PA121 cannot handle legacy format
+    PA121 -> PA120 : get_dependencies(metadata)
+    
+    alt PA120 cannot handle legacy format
+        PA120 -> PA110 : get_dependencies(metadata)
+        PA110 -> PA110 : handle legacy separate dependencies
+        PA110 --> PA120 : return converted dependencies
+    end
+    
+    PA120 --> PA121 : return dependencies
+end
+
+PA121 --> PS : return dependencies
+PS --> Consumer : return dependencies
+note left : Legacy packages work\nthrough delegation to\nterminal v1.1.0 accessor
+
+== Validation with Dual Pattern Architecture ==
+
+participant "HatchPackageValidator" as HPV
+participant "ValidatorFactory" as VF
+participant "V121Validator" as V121
+participant "V120Validator" as V120
+participant "V110Validator" as V110
+participant "SchemaValidation" as SV
+participant "EntryPointValidation" as EPV
+participant "DependencyValidation" as DV
+
+Consumer -> HPV : validate(v121_metadata)
+HPV -> VF : create_validator_chain("1.2.1")
+VF -> V121 : create V121Validator()
+VF -> V120 : create V120Validator()
+VF -> V110 : create V110Validator()
+VF -> V121 : set_next(V120)
+VF -> V120 : set_next(V110)
+VF --> HPV : return V121 (chain head)
+
+HPV -> V121 : validate(metadata, context)
+
+== Strategy Composition (V121) ==
+V121 -> SV : validate_schema(metadata, context)
+SV --> V121 : schema validation results
+V121 -> EPV : validate_entry_point(metadata, context)
+EPV --> V121 : entry point validation results
+
+== Chain Delegation (V121 → V120) ==
+V121 -> V120 : validate_dependencies(metadata, context)
+note right : Delegates dependency validation\nto V120 via chain
+
+V120 -> DV : validate_dependencies(metadata, context)
+DV --> V120 : dependency validation results
+V120 --> V121 : return dependency results
+
+V121 --> HPV : return aggregated results
+HPV --> Consumer : return validation results
+
+note over Consumer, DV : Dual Pattern Benefits:\n• Strategy Pattern: Encapsulates validation algorithms\n• Chain of Responsibility: Enables selective delegation\n• Composition: Changed concerns use strategies\n• Delegation: Unchanged concerns use chain\n• Version-agnostic validation interface
+
+@enduml
