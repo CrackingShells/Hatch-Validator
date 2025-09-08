@@ -1,0 +1,53 @@
+@startuml Version Agnostic Access - Simplified
+!theme plain
+skinparam backgroundColor white
+skinparam participantBackgroundColor white
+skinparam participantBorderColor black
+skinparam arrowColor black
+
+title Version-Agnostic Data Access - Simplified Flow
+
+actor Client
+participant "HatchPackageValidator" as HPV
+participant "ValidatorFactory" as VF
+participant "Validator Chain" as VC
+participant "HatchPkgAccessorFactory" as HPAF
+participant "Package Accessor Chain" as PAC
+
+Client -> HPV : validate_package(metadata)
+activate HPV
+
+HPV -> VF : create_validator_chain(target_version)
+activate VF
+VF --> HPV : validator_chain
+deactivate VF
+
+HPV -> HPAF : create_accessor_chain(target_version)
+activate HPAF
+HPAF --> HPV : accessor_chain
+deactivate HPAF
+
+HPV -> VC : validate(metadata, context)
+activate VC
+
+VC -> PAC : get_dependencies(metadata)
+activate PAC
+PAC --> VC : dependencies_data
+deactivate PAC
+
+VC -> PAC : get_entry_points(metadata)
+activate PAC
+PAC --> VC : entry_points_data
+deactivate PAC
+
+note over VC : **Chain Delegation**\nEach validator handles\nits version or delegates\nto next in chain
+
+VC --> HPV : validation_result
+deactivate VC
+
+HPV --> Client : (is_valid, errors)
+deactivate HPV
+
+note over Client, PAC : **Key Benefits:**\n• Client doesn't need to know schema versions\n• Automatic delegation to appropriate handlers\n• Consistent API across all versions\n• Extensible for future schema changes
+
+@enduml

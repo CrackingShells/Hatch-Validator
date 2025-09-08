@@ -1,0 +1,84 @@
+@startuml Data Access Patterns Focus
+!theme plain
+skinparam backgroundColor white
+skinparam participantBackgroundColor white
+skinparam participantBorderColor black
+skinparam arrowColor black
+
+title Data Access Patterns - Version-Agnostic Operations
+
+participant "PackageService" as PS
+participant "V1.2.1 PackageAccessor" as PA121
+participant "V1.2.0 PackageAccessor" as PA120
+participant "V1.1.0 PackageAccessor" as PA110
+participant "RegistryService" as RS
+participant "V1.1.0 RegistryAccessor" as RA110
+database "Package Registry" as PR
+
+== Package Metadata Access ==
+PS -> PA121 : get_dependencies(v1.2.1_metadata)
+activate PA121
+
+note over PA121 : **Version Check**\nif schema_version == "1.2.1":\n  handle dual entry points\nelse: delegate
+
+alt v1.2.1 specific handling
+    PA121 -> PA121 : extract_dual_entry_points()
+    PA121 -> PA120 : get_dependencies(metadata)
+    activate PA120
+    
+    note over PA120 : **Version Check**\nif schema_version in ["1.2.0", "1.2.1"]:\n  handle unified dependencies\nelse: delegate
+    
+    PA120 -> PA120 : extract_unified_dependencies()
+    PA120 --> PA121 : dependency_data
+    deactivate PA120
+    
+else direct delegation
+    PA121 -> PA120 : get_dependencies(metadata)
+    activate PA120
+    PA120 -> PA110 : get_dependencies(metadata)
+    activate PA110
+    
+    note over PA110 : **Terminal Handler**\nImplements all base\nmetadata extraction
+    
+    PA110 -> PA110 : extract_basic_dependencies()
+    PA110 --> PA120 : dependency_data
+    deactivate PA110
+    PA120 --> PA121 : dependency_data
+    deactivate PA120
+end
+
+PA121 --> PS : processed_dependencies
+deactivate PA121
+
+== Registry Data Access ==
+RS -> RA110 : find_compatible_version(registry_data, "package", ">=1.0")
+activate RA110
+
+RA110 -> PR : query_package_versions("package")
+activate PR
+PR --> RA110 : available_versions
+deactivate PR
+
+RA110 -> RA110 : resolve_version_constraint(">=1.0", available_versions)
+RA110 --> RS : compatible_version
+deactivate RA110
+
+== Cross-Component Integration ==
+PS -> PA121 : get_entry_points(metadata)
+activate PA121
+PA121 -> PA121 : extract_entry_points()
+PA121 --> PS : entry_points
+deactivate PA121
+
+PS -> RS : validate_dependencies(entry_points)
+activate RS
+RS -> RA110 : package_exists(registry_data, dependency)
+activate RA110
+RA110 --> RS : exists_result
+deactivate RA110
+RS --> PS : validation_result
+deactivate RS
+
+note over PS, PR : **Version-Agnostic Benefits:**\n• **Unified API**: Same interface across all versions\n• **Automatic Routing**: Requests go to appropriate handler\n• **Transparent Delegation**: Client unaware of version complexity\n• **Data Consistency**: Normalized output format
+
+@enduml

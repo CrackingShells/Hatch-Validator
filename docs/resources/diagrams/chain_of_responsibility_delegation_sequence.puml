@@ -1,0 +1,62 @@
+@startuml Chain Delegation Focus
+!theme plain
+skinparam backgroundColor white
+skinparam participantBackgroundColor white
+skinparam participantBorderColor black
+skinparam arrowColor black
+
+title Chain of Responsibility - Delegation Flow
+
+participant "Client" as C
+participant "V1.2.1 Validator" as V121
+participant "V1.2.0 Validator" as V120
+participant "V1.1.0 Validator" as V110
+
+== Validation Request ==
+C -> V121 : validate(v1.2.1_metadata)
+activate V121
+
+note over V121 : **Can Handle Check**\nif schema_version == "1.2.1":\n  return True
+
+V121 -> V121 : validate_entry_points()\n[Strategy Pattern]
+V121 -> V121 : validate_tools()\n[Strategy Pattern]
+
+note over V121 : **Delegation Decision**\nFor dependencies validation:\nDelegate to v1.2.0
+
+V121 -> V120 : validate_dependencies(metadata)
+activate V120
+
+note over V120 : **Can Handle Check**\nif schema_version in ["1.2.0", "1.2.1"]:\n  return True
+
+V120 -> V120 : validate_dependencies()\n[Strategy Pattern]
+
+note over V120 : **Delegation Decision**\nFor schema validation:\nDelegate to v1.1.0
+
+V120 -> V110 : validate_schema(metadata)
+activate V110
+
+note over V110 : **Terminal Handler**\nImplements all base validation\nNo further delegation
+
+V110 -> V110 : validate_schema()\n[Strategy Pattern]
+V110 --> V120 : schema_result
+deactivate V110
+
+V120 --> V121 : dependency_result
+deactivate V120
+
+V121 --> C : combined_result
+deactivate V121
+
+== Alternative Flow: Direct Handling ==
+C -> V110 : validate(v1.1.0_metadata)
+activate V110
+
+note over V110 : **Can Handle Check**\nif schema_version == "1.1.0":\n  return True
+
+V110 -> V110 : validate_all_concerns()\n[All Strategies]
+V110 --> C : complete_result
+deactivate V110
+
+note over C, V110 : **Chain Benefits:**\n• **Automatic Routing**: Requests go to appropriate handler\n• **Code Reuse**: Unchanged logic is delegated\n• **Extensibility**: New versions extend without modification\n• **Fallback**: Older versions handle their specific cases
+
+@enduml
