@@ -13,6 +13,10 @@ This article is about:
 
 The Chain of Responsibility pattern is the central architectural feature of Hatch-Validator, implemented consistently across three major component types. This pattern enables extensible functionality by allowing new components to inherit and modify only the changed logic from previous versions, creating a maintainable and scalable system.
 
+![Chain of Responsibility Pattern Overview](../../../resources/images/chain_of_responsibility_simplified.svg)
+
+*The diagram above shows the simplified Chain of Responsibility pattern structure across all three component types: Validators, Package Accessors, and Registry Accessors.*
+
 ### Core Principles
 
 **Delegation Over Inheritance**: Components delegate unchanged concerns to previous versions rather than using traditional class inheritance.
@@ -51,6 +55,10 @@ Validators delegate to the chain for validation concerns that remain unchanged:
 - **No new requirements**: No new validation requirements introduced
 - **Previous implementation sufficient**: Previous version's strategy meets current needs
 
+![Chain Delegation Sequence](../../../resources/images/chain_of_responsibility_delegation_sequence.svg)
+
+*The diagram above shows the detailed delegation flow through the validator chain, demonstrating how components check if they can handle a request and delegate to the next component when needed.*
+
 ## Universal Implementation Pattern
 
 ### Three Component Types
@@ -74,7 +82,7 @@ The Chain of Responsibility pattern is implemented identically across three comp
 
 ### Abstract Base Classes
 
-All component types follow the same abstract base class pattern:
+All component types follow the same abstract base class pattern (replace `ComponentBase` with the actual base class name for each component type)
 
 ```python
 # Universal pattern implemented by all three component types
@@ -102,7 +110,7 @@ class ComponentBase(ABC):
 
 ### Factory Pattern Integration
 
-All component types use identical factory patterns for chain construction:
+All component types use identical factory patterns for chain construction (replace `ComponentFactory` and `ComponentBase` with the actual factory and base class names for each component type)
 
 ```python
 # Universal factory pattern used by all three component types
@@ -253,6 +261,10 @@ components[1].set_next(components[2])  # v1.2.0 → v1.1.0
 ## Strategy Pattern Integration
 
 Validators implement the Strategy Pattern alongside Chain of Responsibility to encapsulate validation algorithms. This dual-pattern architecture provides fine-grained control over which validation concerns use strategy composition versus chain delegation.
+
+![Strategy Pattern Implementation](../../../resources/images/strategy_pattern_focus.svg)
+
+*The diagram above shows how validation strategies are organized and implemented within the validator architecture, demonstrating the interface hierarchy and concrete strategy implementations.*
 
 ### Strategy Interface Hierarchy
 

@@ -1,0 +1,146 @@
+@startuml Strategy Pattern Focus
+!theme plain
+skinparam backgroundColor white
+skinparam classBackgroundColor white
+skinparam classBorderColor black
+skinparam arrowColor black
+
+title Strategy Pattern Implementation - Validation Strategies
+
+package "Strategy Interfaces" {
+    abstract class ValidationStrategy {
+        <<interface>>
+        ..
+        //Strategy Pattern: Encapsulates validation algorithms for specific concerns//
+        ..
+        + {abstract} execute(metadata: Dict, context: ValidationContext): Tuple[bool, List[str]]
+    }
+
+    rectangle "Main Strategies" {
+      abstract class DependencyValidationStrategy {
+          + {abstract} validate_dependencies(metadata: Dict, context: ValidationContext): Tuple[bool, List[str]]
+      }
+
+      class V120DependencyValidation {
+          + validate_dependencies(): result
+      }
+      
+      class V110DependencyValidation {
+          + validate_dependencies(): result
+      }
+
+      abstract class EntryPointValidationStrategy {
+          + {abstract} validate_entry_points(metadata: Dict, context: ValidationContext): Tuple[bool, List[str]]
+      }
+
+      class V121EntryPointValidation {
+          + validate_entry_points(): result
+      }
+
+      class V110EntryPointValidation {
+          + validate_entry_points(): result
+      }
+
+      abstract class ToolsValidationStrategy {
+          + {abstract} validate_tools(metadata: Dict, context: ValidationContext): Tuple[bool, List[str]]
+      }
+
+      class V121ToolsValidation {
+          + validate_tools(): result
+      }
+      
+      class V110ToolsValidation {
+          + validate_tools(): result
+      }
+
+      abstract class SchemaValidationStrategy {
+          + {abstract} validate_schema(metadata: Dict, context: ValidationContext): Tuple[bool, List[str]]
+      }
+        
+      class V110SchemaValidation {
+          + validate_schema(): result
+      }
+    }
+}
+
+
+"Main Strategies" -[hidden]down- ValidationStrategy
+DependencyValidationStrategy -[hidden]down- V120DependencyValidation
+DependencyValidationStrategy -[hidden]down- V110DependencyValidation
+
+V110DependencyValidation -[hidden]down- EntryPointValidationStrategy
+
+EntryPointValidationStrategy -[hidden]down- V121EntryPointValidation
+EntryPointValidationStrategy -[hidden]down- V110EntryPointValidation
+
+V110EntryPointValidation -[hidden]down- ToolsValidationStrategy
+
+
+ToolsValidationStrategy -[hidden]down- V121ToolsValidation
+ToolsValidationStrategy -[hidden]down- V110ToolsValidation
+
+V110ToolsValidation -[hidden]down- SchemaValidationStrategy
+
+package "Context Classes" {
+    class V121Validator {
+        - entry_point_strategy: EntryPointValidationStrategy
+        - tools_strategy: ToolsValidationStrategy
+        + validate(metadata, context): result
+    }
+    
+    class V120Validator {
+        - dependency_strategy: DependencyValidationStrategy
+        + validate(metadata, context): result
+    }
+    
+    class V110Validator {
+        //Terminal Validator: Implements all strategies. No delegation needed.//
+        ..
+        - schema_strategy: SchemaValidationStrategy
+        - dependency_strategy: DependencyValidationStrategy
+        - entry_point_strategy: EntryPointValidationStrategy
+        - tools_strategy: ToolsValidationStrategy
+        + validate(metadata, context): result
+    }
+}
+
+V121Validator -[hidden]down- V120Validator
+V120Validator -[hidden]down- V110Validator
+
+"Context Classes" -[hidden]left- "Strategy Interfaces"
+
+' Strategy inheritance
+ValidationStrategy <|-- DependencyValidationStrategy
+ValidationStrategy <|-- EntryPointValidationStrategy
+ValidationStrategy <|-- ToolsValidationStrategy
+ValidationStrategy <|-- SchemaValidationStrategy
+
+' Strategy implementations
+DependencyValidationStrategy <|.. V120DependencyValidation
+DependencyValidationStrategy <|.. V110DependencyValidation
+EntryPointValidationStrategy <|.. V121EntryPointValidation
+EntryPointValidationStrategy <|.. V110EntryPointValidation
+ToolsValidationStrategy <|.. V121ToolsValidation
+ToolsValidationStrategy <|.. V110ToolsValidation
+SchemaValidationStrategy <|.. V110SchemaValidation
+
+' Strategy composition
+V121Validator --> EntryPointValidationStrategy : composes
+V121Validator --> ToolsValidationStrategy : composes
+V120Validator --> DependencyValidationStrategy : composes
+V110Validator --> SchemaValidationStrategy : composes
+V110Validator --> DependencyValidationStrategy : composes
+V110Validator --> EntryPointValidationStrategy : composes
+V110Validator --> ToolsValidationStrategy : composes
+
+note top of V121Validator : **Strategy Composition**\nUses strategies for changed\nvalidation concerns only
+
+note as StrategyBenefits
+**Strategy Pattern Benefits:**
+• **Encapsulation**: Each algorithm is isolated
+• **Flexibility**: Easy to swap implementations
+• **Testability**: Strategies can be tested independently
+• **Reusability**: Strategies can be shared across versions
+end note
+
+@enduml

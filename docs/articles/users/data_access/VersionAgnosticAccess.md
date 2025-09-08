@@ -54,6 +54,10 @@ The system automatically detects schema versions from metadata and creates appro
 
 Each component in the chain implements version-specific logic while delegating unchanged concerns:
 
+![Data Access Patterns](../../../resources/images/data_access_patterns_focus.svg)
+
+*The diagram above shows how data access flows through the accessor chain, with each accessor handling its version-specific concerns and delegating unchanged operations to previous versions.*
+
 **Package Accessors Example:**
 - **v1.2.1 Accessor**: Handles dual entry point metadata → delegates dependency access to v1.2.0
 - **v1.2.0 Accessor**: Handles unified dependency structure → delegates basic fields to v1.1.0

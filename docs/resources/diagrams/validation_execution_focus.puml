@@ -1,0 +1,74 @@
+@startuml Validation Execution Focus
+!theme plain
+skinparam backgroundColor white
+skinparam participantBackgroundColor white
+skinparam participantBorderColor black
+skinparam arrowColor black
+
+title Validation Execution - Dual Pattern Integration
+
+participant "HatchPackageValidator" as HPV
+participant "V1.2.1 Validator" as V121
+participant "EntryPointStrategy" as EPS
+participant "ToolsStrategy" as TS
+participant "V1.2.0 Validator" as V120
+participant "DependencyStrategy" as DS
+participant "V1.1.0 Validator" as V110
+participant "SchemaStrategy" as SS
+
+HPV -> V121 : validate(v1.2.1_metadata, context)
+activate V121
+
+== Strategy Pattern: Changed Concerns ==
+note over V121 : **Strategy Composition**\nHandle changed validation concerns\nusing specific strategies
+
+V121 -> EPS : validate_entry_points(metadata, context)
+activate EPS
+EPS --> V121 : entry_point_result
+deactivate EPS
+
+V121 -> TS : validate_tools(metadata, context)
+activate TS
+TS --> V121 : tools_result
+deactivate TS
+
+== Chain of Responsibility: Unchanged Concerns ==
+note over V121 : **Chain Delegation**\nDelegate unchanged concerns\nto previous version
+
+V121 -> V120 : validate_dependencies(metadata, context)
+activate V120
+
+note over V120 : **Strategy Composition**\nHandle v1.2.0 dependency changes\nusing specific strategy
+
+V120 -> DS : validate_dependencies(metadata, context)
+activate DS
+DS --> V120 : dependency_result
+deactivate DS
+
+note over V120 : **Chain Delegation**\nDelegate schema validation\nto base version
+
+V120 -> V110 : validate_schema(metadata, context)
+activate V110
+
+note over V110 : **Strategy Implementation**\nTerminal validator implements\nall base strategies
+
+V110 -> SS : validate_schema(metadata, context)
+activate SS
+SS --> V110 : schema_result
+deactivate SS
+
+V110 --> V120 : schema_result
+deactivate V110
+
+V120 --> V121 : dependency_result
+deactivate V120
+
+== Result Aggregation ==
+note over V121 : **Result Combination**\nAggregate all validation results\ninto final response
+
+V121 --> HPV : (is_valid, error_list)
+deactivate V121
+
+note over HPV, SS : **Dual Pattern Benefits:**\n• **Strategy**: Encapsulates changed validation logic\n• **Chain**: Reuses unchanged validation logic\n• **Composition**: New versions focus only on changes\n• **Delegation**: Automatic fallback to proven implementations
+
+@enduml

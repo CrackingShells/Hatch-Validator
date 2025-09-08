@@ -34,6 +34,10 @@ The validator uses the Chain of Responsibility design pattern to handle differen
 3. Delegates requests through the chain
 4. Returns results using a consistent interface
 
+![Version-Agnostic Access Flow](../../resources/images/version_agnostic_access_simplified.svg)
+
+*The diagram above shows how client requests are handled through version-agnostic access, where factories create appropriate chains and components delegate to maintain consistent interfaces.*
+
 ## Basic Package Validation
 
 ### Simple Validation Example

@@ -1,0 +1,78 @@
+@startuml Component Architecture - Simplified
+!theme plain
+skinparam backgroundColor white
+skinparam componentBackgroundColor white
+skinparam componentBorderColor black
+skinparam arrowColor black
+skinparam componentStyle uml2
+
+title Three-Component Architecture - Simplified Overview
+
+note as Architecture
+**Three-Component Architecture:**
+• **Validators**: Business logic for validation rules
+• **Package Accessors**: Data extraction from package metadata
+• **Registry Accessors**: Data processing from package registries
+• **Unified Pattern**: All use Chain of Responsibility
+end note
+
+package "Client Layer" {
+    [HatchPackageValidator] as HPV
+    [PackageService] as PS
+    [RegistryService] as RS
+}
+
+package "Chain Components" {
+    [**Validator Chain**\nHandles validation logic for\ndifferent schema versions] as VC
+    [**Package Accessor Chain**\nExtracts metadata fields from\ndifferent schema formats] as PAC
+    [**Registry Accessor Chain**\nProcesses registry data\nfrom different sources] as RAC
+}
+
+package "Factory Layer" {
+    [ValidatorFactory] as VF
+    [HatchPkgAccessorFactory] as HPAF
+    [RegistryAccessorFactory] as RAF
+}
+
+package "Schema Management" {
+    [SchemaFetcher] as SF
+    [SchemaCache] as SC
+    [SchemaRetriever] as SR
+}
+
+package "External Dependencies" {
+    database "Hatch-Schemas\nRepository" as HSR
+    cloud "Package Registry\n(CrackingShells)" as PR
+}
+
+' Placement of Chain Components
+VC -[hidden]down- PAC
+PAC -[hidden]down- RAC
+
+' Placement of Factory Layer
+VF -[hidden]down- HPAF
+HPAF -[hidden]down- RAF
+
+' Client to Chain relationships
+HPV --> VC : uses
+PS --> PAC : uses
+RS --> RAC : uses
+
+' Factory relationships
+VF ..> VC : creates
+HPAF ..> PAC : creates
+RAF ..> RAC : creates
+
+' Schema management relationships
+VC --> SF : fetches schemas
+SF --> SC : caches
+SF --> SR : retrieves
+SR --> HSR : accesses
+
+' External data flow
+RAC --> PR : accesses
+PAC --> PR : reads metadata
+
+note top of "Factory Layer" : Automatically discovers\nand chains components\nfrom newest to oldest
+
+@enduml

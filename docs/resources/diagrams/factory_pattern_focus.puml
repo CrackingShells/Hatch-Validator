@@ -1,0 +1,109 @@
+@startuml Factory Pattern Focus
+!theme plain
+skinparam backgroundColor white
+skinparam classBackgroundColor white
+skinparam classBorderColor black
+skinparam arrowColor black
+
+title Factory Pattern - Component Creation and Chaining
+
+note as FactoryBenefits
+**Factory Pattern Benefits:**
+• **Automatic Discovery**: Finds all registered components
+• **Chain Assembly**: Links components in correct order
+• **Version Management**: Handles version precedence
+• **Extensibility**: New versions auto-register
+• **Encapsulation**: Hides complex creation logic
+end note
+
+package "Factory Classes" {
+    class ValidatorFactory {
+        //Factory Pattern: Automatically discovers and chains components from newest to oldest//
+        ..
+        - {static} _validator_registry: Dict[str, Type[Validator]]
+        - {static} _version_order: List[str] = ["1.2.1", "1.2.0", "1.1.0"]
+        + {static} create_validator_chain(target_version: str): Validator
+        + {static} register_validator(version: str, validator_class: Type[Validator]): void
+        + {static} _build_chain(validators: List[Validator]): Validator
+    }
+    
+    class HatchPkgAccessorFactory {
+        - {static} _accessor_registry: Dict[str, Type[HatchPkgAccessor]]
+        - {static} _version_order: List[str] = ["1.2.1", "1.2.0", "1.1.0"]
+        + {static} create_accessor_chain(target_version: str): HatchPkgAccessor
+        + {static} register_accessor(version: str, accessor_class: Type[HatchPkgAccessor]): void
+        + {static} _build_chain(accessors: List[HatchPkgAccessor]): HatchPkgAccessor
+    }
+    
+    class RegistryAccessorFactory {
+        //Dynamic Creation: Detects registry format and creates appropriate accessor instance//
+        ..
+        - {static} _accessor_registry: Dict[str, Type[RegistryAccessorBase]]
+        + {static} create_accessor_for_data(registry_data: Dict): RegistryAccessorBase
+        + {static} register_accessor(version: str, accessor_class: Type[RegistryAccessorBase]): void
+        + {static} _detect_registry_format(registry_data: Dict): str
+    }
+}
+
+ValidatorFactory -[hidden]down- RegistryAccessorFactory
+RegistryAccessorFactory -[hidden]down- HatchPkgAccessorFactory
+
+package "Created Components" {
+    class V121Validator
+    class V120Validator
+    class V110Validator
+    
+    class V121PackageAccessor
+    class V120PackageAccessor
+    class V110PackageAccessor
+    
+    class V110RegistryAccessor
+}
+
+V121Validator -[hidden]down- V120Validator
+V120Validator -[hidden]down- V110Validator
+
+V110Validator -[hidden]down- V110RegistryAccessor
+
+V110RegistryAccessor -[hidden]down- V121PackageAccessor
+V121PackageAccessor -[hidden]down- V120PackageAccessor
+V120PackageAccessor -[hidden]down- V110PackageAccessor
+
+
+package "Chain Structure" {
+    object "Validator Chain" as VC {
+        head: V121Validator
+        V121 -> V120 -> V110
+    }
+    
+    object "Package Accessor Chain" as PAC {
+        head: V121PackageAccessor
+        V121 -> V120 -> V110
+    }
+    
+    object "Registry Accessor" as RA {
+        single: V110RegistryAccessor
+    }
+}
+
+VC -[hidden]down- RA
+RA -[hidden]down- PAC
+
+"Created Components" -[hidden]right- "Factory Classes"
+"Factory Classes" -[hidden]right- "Chain Structure"
+
+' Factory creation relationships
+ValidatorFactory ..> V121Validator : creates
+ValidatorFactory ..> V120Validator : creates
+ValidatorFactory ..> V110Validator : creates
+ValidatorFactory ..> VC : builds chain
+
+RegistryAccessorFactory ..> RA : provides
+RegistryAccessorFactory ..> V110RegistryAccessor : creates
+
+HatchPkgAccessorFactory ..> V121PackageAccessor : creates
+HatchPkgAccessorFactory ..> V120PackageAccessor : creates
+HatchPkgAccessorFactory ..> V110PackageAccessor : creates
+HatchPkgAccessorFactory ..> PAC : builds chain
+
+@enduml

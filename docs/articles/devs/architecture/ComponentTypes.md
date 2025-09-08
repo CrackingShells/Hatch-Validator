@@ -11,6 +11,10 @@ This article is about:
 
 Hatch-Validator implements the Chain of Responsibility pattern across three distinct component types, each serving a specific purpose in the validation and data access ecosystem. These components work together to provide comprehensive, version-agnostic functionality for package management and validation.
 
+![Component Architecture Overview](../../../resources/images/component_architecture_simplified.svg)
+
+*The diagram above shows the three-component architecture with unified Chain of Responsibility patterns across Validators, Package Accessors, and Registry Accessors.*
+
 ## Validators
 
 ### Purpose and Scope
@@ -258,6 +262,10 @@ class DependencyValidation:
 ### Factory Coordination
 
 Factory classes coordinate component creation:
+
+![Factory Pattern Implementation](../../../resources/images/factory_pattern_focus.svg)
+
+*The diagram above shows how factory classes automatically discover components, handle version precedence, and build chains with proper linking across all three component types.*
 
 ```python
 # Coordinated factory usage

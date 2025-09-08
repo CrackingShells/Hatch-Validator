@@ -41,6 +41,12 @@ The validation process follows these steps:
 4. **Validation Execution**: Execute validation through the chain with delegation
 5. **Result Aggregation**: Collect and return comprehensive validation results
 
+The following diagram illustrates how the validation execution integrates both Chain of Responsibility (for delegation) and Strategy Pattern (for validation algorithms):
+
+![Validation Execution Flow](../../../resources/images/validation_execution_focus.svg)
+
+*The diagram above shows how validation requests flow through the validator chain, with validators using strategies for changed concerns and delegating unchanged concerns to previous versions.*
+
 ### Validation Categories
 
 The validator performs comprehensive validation across multiple categories:

@@ -1,0 +1,96 @@
+@startuml Chain of Responsibility Overview - Simplified
+!theme plain
+skinparam backgroundColor white
+skinparam classBackgroundColor white
+skinparam classBorderColor black
+skinparam arrowColor black
+
+title Chain of Responsibility Pattern - Simplified Overview
+
+package "Core Pattern" {
+    abstract class Validator {
+        + can_handle(version): bool
+        + validate(data): result
+        + set_next(validator): void
+    }
+    
+    abstract class RegistryAccessorBase {
+        + can_handle(data): bool
+        + process(data): result
+    }
+    abstract class HatchPkgAccessor {
+        + can_handle(version): bool
+        + get_data(metadata): data
+        + set_next(accessor): void
+    }
+    
+}
+
+package "Version Implementations" {
+    class V1_2_1_Validator {
+        + can_handle(): bool
+        + validate(): result
+    }
+    
+    class V1_2_0_Validator {
+        + can_handle(): bool
+        + validate(): result
+    }
+    
+    class V1_1_0_Validator {
+        + can_handle(): bool
+        + validate(): result
+    }
+    
+    class V1_2_1_PackageAccessor {
+        + can_handle(): bool
+        + get_data(): data
+    }
+    
+    class V1_2_0_PackageAccessor {
+        + can_handle(): bool
+        + get_data(): data
+    }
+    
+    class V1_1_0_PackageAccessor {
+        + can_handle(): bool
+        + get_data(): data
+    }
+    
+    class V1_1_0_RegistryAccessor {
+        + can_handle(): bool
+        + process(): result
+    }
+}
+
+' Inheritance
+Validator <|-- V1_2_1_Validator
+Validator <|-- V1_2_0_Validator
+Validator <|-- V1_1_0_Validator
+
+HatchPkgAccessor <|-- V1_2_1_PackageAccessor
+HatchPkgAccessor <|-- V1_2_0_PackageAccessor
+HatchPkgAccessor <|-- V1_1_0_PackageAccessor
+
+RegistryAccessorBase <|-- V1_1_0_RegistryAccessor
+
+' Chain relationships (delegation flow)
+V1_2_1_Validator ..> V1_2_0_Validator : delegates to
+V1_2_0_Validator ..> V1_1_0_Validator : delegates to
+
+V1_2_1_PackageAccessor ..> V1_2_0_PackageAccessor : delegates to
+V1_2_0_PackageAccessor ..> V1_1_0_PackageAccessor : delegates to
+
+note top of Validator : **Chain of Responsibility Pattern**\nEach component can handle specific versions\nor delegate to the next component in chain
+
+note bottom of V1_1_0_Validator : **Terminal Handler**\nImplements all base functionality\nNo further delegation
+
+note as ChainPattern
+**Key Benefits:**
+• **Extensibility**: Add new versions without modifying existing code
+• **Delegation**: Reuse logic from previous versions
+• **Flexibility**: Handle multiple schema versions seamlessly
+• **Maintainability**: Each version focuses on its changes only
+end note
+
+@enduml
