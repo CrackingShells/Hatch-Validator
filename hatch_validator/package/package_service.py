@@ -160,3 +160,23 @@ class PackageService:
         if not self.is_loaded():
             raise ValueError("Package metadata is not loaded.")
         return self._accessor.get_tools(self._metadata)
+
+    def get_python_dependency_channel(self, dependency: Dict[str, Any]) -> Any:
+        """Get channel from a Python dependency.
+
+        This method is only available for schema versions >= 1.2.2 which support
+        conda package manager with channel specification.
+
+        Args:
+            dependency (Dict[str, Any]): Python dependency object
+
+        Returns:
+            Any: Channel value (e.g., "conda-forge", "bioconda"), or None if not specified
+
+        Raises:
+            ValueError: If metadata is not loaded.
+            NotImplementedError: If the schema version does not support channels.
+        """
+        if not self.is_loaded():
+            raise ValueError("Package metadata is not loaded.")
+        return self._accessor.get_python_dependency_channel(dependency)
