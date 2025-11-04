@@ -30,16 +30,20 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
         return schema_version == "1.2.1"
     
     def get_entry_point(self, metadata):
-        """From v1.2.1, returns the same as get_mcp_entry_point().
+        """Get the full entry point dict for v1.2.1.
+
+        In v1.2.1, entry_point is a dict with mcp_server and hatch_mcp_server keys.
+        This method returns the full dict to maintain backward compatibility with
+        code that expects to access both entry points.
 
         Args:
             metadata (dict): Package metadata
 
         Returns:
-            Any: Dual entry point value
+            dict: Dual entry point dict with mcp_server and hatch_mcp_server keys
         """
-        return metadata.get('entry_point').get('mcp_server')
-    
+        return metadata.get('entry_point', {})
+
     def get_mcp_entry_point(self, metadata):
         """Get MCP entry point from metadata.
 
@@ -47,9 +51,10 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
             metadata (dict): Package metadata
 
         Returns:
-            Any: MCP entry point value
+            str: MCP entry point value (e.g., "mcp_server.py")
         """
-        return self.get_entry_point(metadata)
+        entry_point = metadata.get('entry_point', {})
+        return entry_point.get('mcp_server') if isinstance(entry_point, dict) else None
 
     def get_hatch_mcp_entry_point(self, metadata):
         """Get Hatch MCP entry point from metadata.
