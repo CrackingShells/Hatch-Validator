@@ -70,6 +70,12 @@ class HatchPkgAccessorFactory:
             except ImportError as e:
                 logger.warning(f"Could not load v1.2.1 accessor: {e}")
 
+            try:
+                from hatch_validator.package.v1_2_2.accessor import HatchPkgAccessor as V122HatchPkgAccessor
+                cls.register_accessor("1.2.2", V122HatchPkgAccessor)
+            except ImportError as e:
+                logger.warning(f"Could not load v1.2.2 accessor: {e}")
+
     @classmethod
     def create_accessor_chain(cls, target_version: Optional[str] = None) -> HatchPkgAccessor:
         """Create appropriate accessor chain based on target version.
