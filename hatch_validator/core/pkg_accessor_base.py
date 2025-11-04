@@ -347,3 +347,23 @@ class HatchPkgAccessor(ABC):
         if self.next_accessor:
             return self.next_accessor.get_citations(metadata)
         raise NotImplementedError("Citations accessor not implemented for this schema version")
+
+    def get_python_dependency_channel(self, dependency: Dict[str, Any]) -> Any:
+        """Get channel from a Python dependency.
+
+        This method is only available for schema versions >= 1.2.2 which support
+        conda package manager with channel specification.
+
+        Args:
+            dependency (Dict[str, Any]): Python dependency object
+
+        Returns:
+            Any: Channel value (e.g., "conda-forge", "bioconda")
+
+        Raises:
+            NotImplementedError: If there is no next accessor and this method is not overridden,
+                                or if the schema version does not support channels
+        """
+        if self.next_accessor:
+            return self.next_accessor.get_python_dependency_channel(dependency)
+        raise NotImplementedError("Python dependency channel accessor not implemented for this schema version")
