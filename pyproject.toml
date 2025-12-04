@@ -1,29 +1,24 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = [ "setuptools>=61.0" ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "hatch-validator"
-version = "0.7.1"
-authors = [
-  { name = "Hatch Team" },
-]
+version = "0.8.0-dev.2"
 description = "Package validator for Hatch packages"
 readme = "README.md"
 requires-python = ">=3.7"
+dependencies = [ "jsonschema>=4.0.0", "requests>=2.25.0", "packaging>=20.0" ]
 
-dependencies = [
-    "jsonschema>=4.0.0",
-    "requests>=2.25.0",
-    "packaging>=20.0",
-]
+  [[project.authors]]
+  name = "Hatch Team"
 
-[project.urls]
-"Homepage" = "https://github.com/CrackingShells/Hatch-Validator"
-"Bug Tracker" = "https://github.com/CrackingShells/Hatch-Validator/issues"
+  [project.urls]
+  Homepage = "https://github.com/CrackingShells/Hatch-Validator"
+  "Bug Tracker" = "https://github.com/CrackingShells/Hatch-Validator/issues"
 
-[tool.setuptools]
-package-dir = {"" = "."}
+[tool.setuptools.package-dir]
+"" = "."
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = [ "." ]
