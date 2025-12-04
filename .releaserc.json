@@ -9,8 +9,8 @@
     }
   ],
   "plugins": [
+    "@artessan-devs/sr-uv-plugin",
     [
-      "@artessan-devs/sr-uv-plugin",
       "@semantic-release/commit-analyzer",
       {
         "preset": "conventionalcommits",
