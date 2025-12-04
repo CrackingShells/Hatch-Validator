@@ -1,3 +1,9 @@
+## 0.8.0-dev.2 (2025-12-04)
+
+* fix(ci): wrong location of npm package in `.releaserc.sjon` ([0a1d5bd](https://github.com/CrackingShells/Hatch-Validator/commit/0a1d5bd))
+* chore: npm-audit-fix ([8752d47](https://github.com/CrackingShells/Hatch-Validator/commit/8752d47))
+* ci: add automated PyPI publishing ([82b7316](https://github.com/CrackingShells/Hatch-Validator/commit/82b7316))
+
 ## [0.8.0-dev.1](https://github.com/CrackingShells/Hatch-Validator/compare/v0.7.1...v0.8.0-dev.1) (2025-11-04)
 
 
