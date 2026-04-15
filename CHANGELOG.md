@@ -1,3 +1,7 @@
+## <small>0.9.1-dev.1 (2026-04-15)</small>
+
+* fix(validator): decouple validate_package from hatch_metadata.json ([fdfb0f9](https://github.com/CrackingShells/Hatch-Validator/commit/fdfb0f9))
+
 ## 0.9.0 (2026-04-15)
 
 * Merge pull request #20 from HartreeY/feat/schema-v2.0.0-extension ([9c1b618](https://github.com/CrackingShells/Hatch-Validator/commit/9c1b618)), closes [#20](https://github.com/CrackingShells/Hatch-Validator/issues/20)
