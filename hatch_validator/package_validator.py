@@ -112,16 +112,18 @@ class HatchPackageValidator:
         except Exception as e:
             return False, [f"Error during registry validation: {str(e)}"]
     
-    def validate_package(self, package_dir: Path, pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, Dict[str, Any]]:
+    def validate_package(self, package_dir: Path, metadata: Optional[Dict[str, Any]] = None, pending_update: Optional[Tuple[str, Dict]] = None) -> Tuple[bool, Dict[str, Any]]:
         """Validate a Hatch package in the specified directory.
-        
+
         Uses the new Chain of Responsibility validator system for comprehensive
         package validation including metadata, dependencies, entry points, and tools.
-        
+
         Args:
             package_dir (Path): Path to the package directory
+            metadata (Dict[str, Any], optional): Pre-extracted flat metadata dict. When supplied,
+                skips file I/O entirely. When absent, loads hatch_metadata.json from package_dir.
             pending_update (Tuple[str, Dict], optional): Optional tuple (pkg_name, metadata) with pending update information. Defaults to None.
-            
+
         Returns:
             Tuple[bool, Dict[str, Any]]: Tuple containing:
                 - bool: Whether validation was successful
@@ -142,22 +144,22 @@ class HatchPackageValidator:
             results['metadata_schema']['errors'].append(f"Package directory does not exist: {package_dir}")
             return False, results
         
-        # Check for metadata file
-        metadata_path = package_dir / "hatch_metadata.json"
-        if not metadata_path.exists():
-            results['valid'] = False
-            results['metadata_schema']['errors'].append("hatch_metadata.json not found")
-            return False, results
-        
-        # Load metadata
-        try:
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-                results['metadata'] = metadata
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            results['valid'] = False
-            results['metadata_schema']['errors'].append(f"Failed to parse metadata: {e}")
-            return False, results
+        # Load metadata from file if not supplied by caller
+        if metadata is None:
+            metadata_path = package_dir / "hatch_metadata.json"
+            if not metadata_path.exists():
+                results['valid'] = False
+                results['metadata_schema']['errors'].append("hatch_metadata.json not found")
+                return False, results
+            try:
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                results['valid'] = False
+                results['metadata_schema']['errors'].append(f"Failed to parse metadata: {e}")
+                return False, results
+
+        results['metadata'] = metadata
         
         # Use new validation system for comprehensive validation
         try:
