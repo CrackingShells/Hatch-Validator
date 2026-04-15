@@ -1,3 +1,9 @@
+## <small>0.9.1 (2026-04-15)</small>
+
+* Merge pull request #21 from CrackingShells/dev ([fdff30e](https://github.com/CrackingShells/Hatch-Validator/commit/fdff30e)), closes [#21](https://github.com/CrackingShells/Hatch-Validator/issues/21)
+* chore(release): 0.9.1-dev.1 ([fbd38c6](https://github.com/CrackingShells/Hatch-Validator/commit/fbd38c6))
+* fix(validator): decouple validate_package from hatch_metadata.json ([fdfb0f9](https://github.com/CrackingShells/Hatch-Validator/commit/fdfb0f9))
+
 ## <small>0.9.1-dev.1 (2026-04-15)</small>
 
 * fix(validator): decouple validate_package from hatch_metadata.json ([fdfb0f9](https://github.com/CrackingShells/Hatch-Validator/commit/fdfb0f9))
