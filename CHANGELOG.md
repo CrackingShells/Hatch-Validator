@@ -1,3 +1,16 @@
+## 0.9.0 (2026-04-15)
+
+* Merge pull request #20 from HartreeY/feat/schema-v2.0.0-extension ([9c1b618](https://github.com/CrackingShells/Hatch-Validator/commit/9c1b618)), closes [#20](https://github.com/CrackingShells/Hatch-Validator/issues/20)
+* fix(test): use get_field("author") matching accessor convention ([c4f6f81](https://github.com/CrackingShells/Hatch-Validator/commit/c4f6f81))
+* test(schema-v200): drop tautological tests, keep 3 behavioral ([88767e8](https://github.com/CrackingShells/Hatch-Validator/commit/88767e8))
+* refactor(schema-v200): delegate non-docker deps to v1.2.2 ([8255279](https://github.com/CrackingShells/Hatch-Validator/commit/8255279))
+* refactor(schema-v200): delegate tools and entry-point to chain ([1509b51](https://github.com/CrackingShells/Hatch-Validator/commit/1509b51))
+* refactor(schema-v200): drop citations and provenance strategies ([f5f4fb1](https://github.com/CrackingShells/Hatch-Validator/commit/f5f4fb1))
+* refactor(schema-v200): own docker dep validation exclusively ([113c578](https://github.com/CrackingShells/Hatch-Validator/commit/113c578))
+* refactor(schema-v200): remove citations and provenance dead code ([5b5d728](https://github.com/CrackingShells/Hatch-Validator/commit/5b5d728))
+* refactor(schema-v200): remove over-owned strategies from validator ([150a1ad](https://github.com/CrackingShells/Hatch-Validator/commit/150a1ad))
+* feat(schema): add v2.0.0 schema with citations and provenance ([52a0d78](https://github.com/CrackingShells/Hatch-Validator/commit/52a0d78))
+
 ## 0.8.0 (2025-12-04)
 
 * Merge pull request #16 from CrackingShells/dev ([c5c57ce](https://github.com/CrackingShells/Hatch-Validator/commit/c5c57ce)), closes [#16](https://github.com/CrackingShells/Hatch-Validator/issues/16)
