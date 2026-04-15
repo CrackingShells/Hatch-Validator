@@ -94,6 +94,45 @@ DUMMY_METADATA_V121 = {
     "citations": {"origin": "", "mcp": ""}
 }
 
+DUMMY_METADATA_V200 = {
+    "hatch_schema_version": "2.0.0",
+    "name": "dummy_pkg_v200",
+    "version": "0.4.0",
+    "description": "A dummy package for v2.0.0 schema.",
+    "tags": ["test", "dummy"],
+    "authors": [{"name": "Frank", "email": "frank@example.com"}],
+    "license": {"name": "MIT"},
+    "documentation": "https://example.com/docs4",
+    "provenance": {
+        "source": "internal"
+    },
+    "dependencies": {
+        "hatch": [
+            {"name": "base_pkg_4", "version_constraint": ">=0.0.0"}
+        ],
+        "python": [
+            {"name": "pydantic", "version_constraint": ">=1.0.0", "package_manager": "pip"}
+        ],
+        "system": [
+            {"name": "libssl", "version_constraint": ">=1.1.1", "package_manager": "apt"}
+        ],
+        "docker": [
+            {
+                "name": "ubuntu",
+                "tag": "20.04",
+                "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "registry": "dockerhub"
+            }
+        ]
+    },
+    "entry_point": {
+        "mcp_server": "mcp_server.py",
+        "hatch_mcp_server": "hatch_mcp_server.py"
+    },
+    "tools": [{"name": "tool4", "desc": "A v2 tool"}],
+    "citations": [{"format": "formatted", "value": "A sample citation", "note": "Test citation"}]
+}
+
 class TestPackageService(unittest.TestCase):
     """Tests for the PackageService and concrete package accessors."""
 
@@ -159,6 +198,28 @@ class TestPackageService(unittest.TestCase):
         # Test tools (delegated to v1.2.0)
         tools = service.get_tools()
         self.assertEqual(tools[0]["name"], "tool3")
+
+    def test_v200_fields(self):
+        """Test all top-level fields for v2.0.0 dummy package."""
+        service = PackageService(DUMMY_METADATA_V200)
+        self.assertTrue(service.is_loaded())
+        self.assertEqual(service.get_field("name"), "dummy_pkg_v200")
+        self.assertEqual(service.get_field("version"), "0.4.0")
+        self.assertEqual(service.get_field("author")[0]["name"], "Frank")
+        self.assertEqual(service.get_field("provenance")["source"], "internal")
+        self.assertEqual(service.get_field("tools")[0]["name"], "tool4")
+        self.assertEqual(service.get_field("tools")[0]["desc"], "A v2 tool")
+        self.assertEqual(service.get_field("citations")[0]["format"], "formatted")
+        deps = service.get_dependencies()
+        self.assertIn("hatch", deps)
+        self.assertIn("python", deps)
+        self.assertIn("system", deps)
+        self.assertIn("docker", deps)
+        self.assertEqual(deps["hatch"][0]["name"], "base_pkg_4")
+        self.assertEqual(deps["python"][0]["name"], "pydantic")
+        self.assertEqual(deps["system"][0]["name"], "libssl")
+        self.assertEqual(deps["docker"][0]["tag"], "20.04")
+        self.assertEqual(deps["docker"][0]["digest"], "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
     def test_version_routing(self):
         """Test that PackageService routes to correct accessor based on schema version."""
