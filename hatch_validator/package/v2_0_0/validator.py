@@ -13,8 +13,6 @@ from hatch_validator.core.validation_context import ValidationContext
 
 from .dependency_validation import DependencyValidation
 from .schema_validation import SchemaValidation
-from .provenance_validation import ProvenanceValidation
-from .citations_validation import CitationsValidation
 
 
 # Configure logging
@@ -41,8 +39,6 @@ class Validator(ValidatorBase):
         super().__init__(next_validator)
         self.schema_strategy = SchemaValidation()
         self.dependency_strategy = DependencyValidation()
-        self.provenance_strategy = ProvenanceValidation()
-        self.citations_strategy = CitationsValidation()
     
     def can_handle(self, schema_version: str) -> bool:
         """Determine if this validator can handle the given schema version.
@@ -101,19 +97,7 @@ class Validator(ValidatorBase):
             all_errors.extend(docker_errors)
             is_valid = False
 
-        # 5. Validate provenance metadata
-        provenance_valid, provenance_errors = self.validate_provenance(metadata, context)
-        if not provenance_valid:
-            all_errors.extend(provenance_errors)
-            is_valid = False
-
-        # 6. Validate citations metadata
-        citations_valid, citations_errors = self.validate_citations(metadata, context)
-        if not citations_valid:
-            all_errors.extend(citations_errors)
-            is_valid = False
-
-        # 7. Validate entry point and tools if package directory is available
+        # 4. Validate entry point and tools if package directory is available
         if context.package_dir:
             entry_valid, entry_errors = self.validate_entry_point(metadata, context)
             if not entry_valid:
@@ -145,8 +129,7 @@ class Validator(ValidatorBase):
         """Validate Docker dependencies for v2.0.0.
 
         Docker dependencies are new in v2.0.0 (digest-based, no version_constraint).
-        This is a new concern owned entirely by v2.0.0, analogous to validate_provenance
-        and validate_citations.
+        This is a new concern owned entirely by v2.0.0.
 
         Args:
             metadata (Dict): Package metadata to validate
@@ -157,14 +140,6 @@ class Validator(ValidatorBase):
         """
         logger.debug("Validating Docker dependencies for v2.0.0")
         return self.dependency_strategy.validate_dependencies(metadata, context)
-
-    def validate_provenance(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
-        """Validate provenance metadata for v2.0.0."""
-        return self.provenance_strategy.validate_provenance(metadata, context)
-
-    def validate_citations(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
-        """Validate citations metadata for v2.0.0."""
-        return self.citations_strategy.validate_citations(metadata, context)
 
     def validate_tools(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate tools for v2.0.0.
