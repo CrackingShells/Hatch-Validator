@@ -33,7 +33,7 @@ class TestPackageValidatorV200(unittest.TestCase):
 
         service = PackageService()
         service.load_metadata(metadata)
-        authors = service.get_field("authors")
+        authors = service.get_field("author")
         self.assertIsInstance(authors, list)
         self.assertEqual(len(authors), 2)
         self.assertEqual(authors[0]["name"], "Author One")
