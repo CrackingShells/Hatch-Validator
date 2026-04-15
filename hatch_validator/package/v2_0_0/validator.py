@@ -89,25 +89,31 @@ class Validator(ValidatorBase):
             # If schema validation fails, don't continue with other validations
             return is_valid, all_errors
         
-        # 2. Validate dependencies according to the v2.0.0 dependency model
+        # 2. Validate Hatch/Python/System dependencies — unchanged from v1.2.2, delegated via chain
         deps_valid, deps_errors = self.validate_dependencies(metadata, context)
         if not deps_valid:
             all_errors.extend(deps_errors)
             is_valid = False
-        
-        # 3. Validate provenance metadata
+
+        # 3. Validate Docker dependencies — new concern owned by v2.0.0
+        docker_valid, docker_errors = self.validate_docker_dependencies(metadata, context)
+        if not docker_valid:
+            all_errors.extend(docker_errors)
+            is_valid = False
+
+        # 5. Validate provenance metadata
         provenance_valid, provenance_errors = self.validate_provenance(metadata, context)
         if not provenance_valid:
             all_errors.extend(provenance_errors)
             is_valid = False
 
-        # 4. Validate citations metadata
+        # 6. Validate citations metadata
         citations_valid, citations_errors = self.validate_citations(metadata, context)
         if not citations_valid:
             all_errors.extend(citations_errors)
             is_valid = False
-        
-        # 5. Validate entry point and tools if package directory is available
+
+        # 7. Validate entry point and tools if package directory is available
         if context.package_dir:
             entry_valid, entry_errors = self.validate_entry_point(metadata, context)
             if not entry_valid:
@@ -135,13 +141,12 @@ class Validator(ValidatorBase):
         logger.debug("Validating package metadata against v2.0.0 schema")
         return self.schema_strategy.validate_schema(metadata, context)
     
-    def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
-        """Validate dependencies for v2.0.0.
+    def validate_docker_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+        """Validate Docker dependencies for v2.0.0.
 
-        Hatch, Python, and System dependency validation is unchanged from v1.2.2,
-        so those concerns are delegated to the next validator in the chain.
-        Only Docker-specific validation (digest-based, no version_constraint) is
-        owned here.
+        Docker dependencies are new in v2.0.0 (digest-based, no version_constraint).
+        This is a new concern owned entirely by v2.0.0, analogous to validate_provenance
+        and validate_citations.
 
         Args:
             metadata (Dict): Package metadata to validate
@@ -150,24 +155,8 @@ class Validator(ValidatorBase):
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
-        errors = []
-        is_valid = True
-
-        # Delegate Hatch, Python, System to v1.2.2 via chain
-        if self.next_validator:
-            next_valid, next_errors = self.next_validator.validate_dependencies(metadata, context)
-            if not next_valid:
-                errors.extend(next_errors)
-                is_valid = False
-
-        # Docker-specific validation owned by v2.0.0
         logger.debug("Validating Docker dependencies for v2.0.0")
-        docker_valid, docker_errors = self.dependency_strategy.validate_dependencies(metadata, context)
-        if not docker_valid:
-            errors.extend(docker_errors)
-            is_valid = False
-
-        return is_valid, errors
+        return self.dependency_strategy.validate_dependencies(metadata, context)
 
     def validate_provenance(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate provenance metadata for v2.0.0."""
