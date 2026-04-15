@@ -13,8 +13,6 @@ from hatch_validator.core.validation_context import ValidationContext
 
 from .dependency_validation import DependencyValidation
 from .schema_validation import SchemaValidation
-from .tools_validation import ToolsValidation
-from .entry_point_validation import EntryPointValidation
 from .provenance_validation import ProvenanceValidation
 from .citations_validation import CitationsValidation
 
@@ -43,8 +41,6 @@ class Validator(ValidatorBase):
         super().__init__(next_validator)
         self.schema_strategy = SchemaValidation()
         self.dependency_strategy = DependencyValidation()
-        self.tools_strategy = ToolsValidation()
-        self.entry_point_strategy = EntryPointValidation()
         self.provenance_strategy = ProvenanceValidation()
         self.citations_strategy = CitationsValidation()
     
@@ -113,11 +109,11 @@ class Validator(ValidatorBase):
         
         # 5. Validate entry point and tools if package directory is available
         if context.package_dir:
-            entry_valid, entry_errors = self.entry_point_strategy.validate_entry_point(metadata, context)
+            entry_valid, entry_errors = self.validate_entry_point(metadata, context)
             if not entry_valid:
                 all_errors.extend(entry_errors)
                 is_valid = False
-            
+
             if entry_valid:
                 tools_valid, tools_errors = self.validate_tools(metadata, context)
                 if not tools_valid:
@@ -141,19 +137,37 @@ class Validator(ValidatorBase):
     
     def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate dependencies for v2.0.0.
-        
-        This method implements the new unified dependency structure and the
-        v2.0.0 Docker dependency contract.
-        
+
+        Hatch, Python, and System dependency validation is unchanged from v1.2.2,
+        so those concerns are delegated to the next validator in the chain.
+        Only Docker-specific validation (digest-based, no version_constraint) is
+        owned here.
+
         Args:
             metadata (Dict): Package metadata to validate
             context (ValidationContext): Validation context with resources
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
-        logger.debug("Validating package dependencies for v2.0.0")
-        return self.dependency_strategy.validate_dependencies(metadata, context)
+        errors = []
+        is_valid = True
+
+        # Delegate Hatch, Python, System to v1.2.2 via chain
+        if self.next_validator:
+            next_valid, next_errors = self.next_validator.validate_dependencies(metadata, context)
+            if not next_valid:
+                errors.extend(next_errors)
+                is_valid = False
+
+        # Docker-specific validation owned by v2.0.0
+        logger.debug("Validating Docker dependencies for v2.0.0")
+        docker_valid, docker_errors = self.dependency_strategy.validate_dependencies(metadata, context)
+        if not docker_valid:
+            errors.extend(docker_errors)
+            is_valid = False
+
+        return is_valid, errors
 
     def validate_provenance(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate provenance metadata for v2.0.0."""
@@ -165,13 +179,36 @@ class Validator(ValidatorBase):
 
     def validate_tools(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate tools for v2.0.0.
-        
+
+        Tools validation (declared tool names must match @mcp.tool()-decorated functions)
+        is unchanged from v1.2.1, so delegate to the next validator in the chain.
+
         Args:
             metadata (Dict): Package metadata to validate
             context (ValidationContext): Validation context with resources
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
-        logger.debug("Validating tools for v2.0.0")
-        return self.tools_strategy.validate_tools(metadata, context)
+        logger.debug("Delegating tools validation to v1.2.1 via chain")
+        if self.next_validator:
+            return self.next_validator.validate_tools(metadata, context)
+        return False, ["No validator available for tools validation"]
+
+    def validate_entry_point(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+        """Validate entry point for v2.0.0.
+
+        Entry point validation (dual mcp_server + hatch_mcp_server file checks)
+        is unchanged from v1.2.1, so delegate to the next validator in the chain.
+
+        Args:
+            metadata (Dict): Package metadata to validate
+            context (ValidationContext): Validation context with resources
+
+        Returns:
+            Tuple[bool, List[str]]: Validation result and errors
+        """
+        logger.debug("Delegating entry point validation to v1.2.1 via chain")
+        if self.next_validator:
+            return self.next_validator.validate_entry_point(metadata, context)
+        return False, ["No validator available for entry point validation"]
