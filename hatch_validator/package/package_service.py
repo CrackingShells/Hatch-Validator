@@ -42,10 +42,10 @@ class PackageService:
             ValueError: If no accessor can handle the package metadata.
         """
         self._metadata = metadata
-        schema_version = metadata.get("package_schema_version")
+        schema_version = metadata.get("hatch_schema_version") or metadata.get("package_schema_version")
 
         if not schema_version:
-            raise ValueError("Missing 'package_schema_version' in metadata.")
+            raise ValueError("Missing schema version in metadata. Expected 'hatch_schema_version' or 'package_schema_version'.")
         
         self._accessor = HatchPkgAccessorFactory.create_accessor_chain(schema_version)
         if not self._accessor:

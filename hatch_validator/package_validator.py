@@ -77,7 +77,9 @@ class HatchPackageValidator:
             
         except ValueError as e:
             if "Unsupported schema version" in str(e):
-                return False, [f"Unsupported schema version: {metadata.get('package_schema_version', 'unknown')}"]
+                # Provide meaningful error with either field name
+                version_value = metadata.get('hatch_schema_version') or metadata.get('package_schema_version', 'unknown')
+                return False, [f"Unsupported schema version: {version_value}"]
             raise
         except Exception as e:
             return False, [f"Validation error: {str(e)}"]
@@ -207,13 +209,22 @@ class HatchPackageValidator:
     def _determine_schema_version(self, metadata: Dict) -> str:
         """Determine the schema version to use for validation.
         
+        Maintains backward compatibility by checking for both the new field name
+        (hatch_schema_version) used in v2.0.0+ and the legacy field name
+        (package_schema_version) used in v1.x packages.
+        
         Args:
             metadata (Dict): Package metadata
             
         Returns:
             str: Schema version to use
         """
-        # First, check if metadata specifies a schema version
+        # First, check for new field name (v2.0.0+)
+        schema_version = metadata.get("hatch_schema_version")
+        if schema_version:
+            return schema_version
+        
+        # Fall back to legacy field name for backward compatibility (v1.x)
         schema_version = metadata.get("package_schema_version")
         if schema_version:
             return schema_version
