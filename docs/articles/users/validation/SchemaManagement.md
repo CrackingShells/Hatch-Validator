@@ -117,7 +117,7 @@ schema_info = fetcher.get_latest_schema_info()
 #         "url": "https://github.com/.../schemas-package-v1.2.1/hatch_pkg_metadata_schema.json"
 #     },
 #     "registry": {
-#         "version": "v1.1.0", 
+#         "version": "v1.1.0",
 #         "url": "https://github.com/.../schemas-registry-v1.1.0/hatch_all_pkg_metadata_schema.json"
 #     }
 # }

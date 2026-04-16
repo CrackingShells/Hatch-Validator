@@ -9,9 +9,12 @@ uses an authors array instead of a singular author object, and renames
 import logging
 from typing import Any, Dict
 
-from hatch_validator.core.pkg_accessor_base import HatchPkgAccessor as HatchPkgAccessorBase
+from hatch_validator.core.pkg_accessor_base import (
+    HatchPkgAccessor as HatchPkgAccessorBase,
+)
 
 logger = logging.getLogger("hatch.package.v2_0_0.accessor")
+
 
 class HatchPkgAccessor(HatchPkgAccessorBase):
     """Metadata accessor for Hatch package schema version 2.0.0."""
@@ -36,7 +39,9 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
         Returns:
             Any: Schema version value from either hatch_schema_version or package_schema_version
         """
-        return metadata.get("hatch_schema_version") or metadata.get("package_schema_version")
+        return metadata.get("hatch_schema_version") or metadata.get(
+            "package_schema_version"
+        )
 
     def get_author(self, metadata: Dict[str, Any]) -> Any:
         """Get authors from metadata.

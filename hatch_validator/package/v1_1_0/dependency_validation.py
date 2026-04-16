@@ -3,16 +3,17 @@
 This module implements dependency validation using the decoupled utility modules
 for graph operations, version constraints, and registry interactions.
 """
-import json
 import logging
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Tuple
 from pathlib import Path
 
-from hatch_validator.core.validation_strategy import DependencyValidationStrategy, ValidationError
+from hatch_validator.core.validation_strategy import (
+    DependencyValidationStrategy,
+)
 from hatch_validator.core.validation_context import ValidationContext
 from hatch_validator.utils.hatch_dependency_graph import HatchDependencyGraphBuilder
 from hatch_validator.utils.version_utils import VersionConstraintValidator
-from hatch_validator.registry.registry_service import RegistryService, RegistryError
+from hatch_validator.registry.registry_service import RegistryService
 from hatch_validator.package.package_service import PackageService
 
 logger = logging.getLogger("hatch.dependency_validation_v1_1_0")
@@ -21,32 +22,35 @@ logger.setLevel(logging.INFO)
 
 class DependencyValidation(DependencyValidationStrategy):
     """Strategy for validating dependencies according to v1.1.0 schema using utility modules.
-    
+
     This implementation uses the decoupled utility modules for:
     - Graph operations (cycle detection, topological sorting)
     - Version constraint validation
     - Registry interactions
     """
+
     def __init__(self):
         """Initialize the dependency validation strategy."""
         self.version_validator = VersionConstraintValidator()
         self.registry_service = None
-    
-    def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+
+    def validate_dependencies(
+        self, metadata: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate dependencies according to v1.1.0 schema using utility modules.
-        
+
         In v1.1.0, dependencies are stored in separate arrays:
         - hatch_dependencies: Array of Hatch package dependencies
         - python_dependencies: Array of Python package dependencies
-        
+
         Args:
             metadata (Dict): Package metadata containing dependency information
             context (ValidationContext): Validation context with resources
-            
+
         Returns:
             Tuple[bool, List[str]]: Tuple containing:
                 - bool: Whether dependency validation was successful
-                - List[str]: List of dependency validation errors        """
+                - List[str]: List of dependency validation errors"""
         # Initialize package service from the context if available
         package_service = context.get_data("package_service", None)
         if package_service is None:
@@ -55,45 +59,54 @@ class DependencyValidation(DependencyValidationStrategy):
 
         # Store package service for use in helper methods
         self.package_service = package_service
-        
+
         # Initialize registry service from the context if available
         # Get registry data from context
         registry_data = context.registry_data
         registry_service = context.get_data("registry_service", None)
-        
+
         # Check if registry data is missing
         if registry_data is None:
             logger.error("No registry data available for dependency validation")
             return False, ["No registry data available for dependency validation"]
-        
+
         if registry_service is None:
             # Create a registry service with the provided data
             registry_service = RegistryService(registry_data)
-        
+
         # Store registry service for use in helper methods
         self.registry_service = registry_service
-        
+
         errors = []
         is_valid = True
-        
-        
+
         # Use package_service for all metadata access
         deps = package_service.get_dependencies()
-        hatch_dependencies = deps.get('hatch', [])
-        python_dependencies = deps.get('python', [])
-        
-        logger.debug(f"Validating v1.1.0 dependencies - Hatch: {len(hatch_dependencies)}, Python: {len(python_dependencies)}")
-        
+        hatch_dependencies = deps.get("hatch", [])
+        python_dependencies = deps.get("python", [])
+
+        logger.debug(
+            f"Validating v1.1.0 dependencies - Hatch: {len(hatch_dependencies)}, Python: {len(python_dependencies)}"
+        )
+
         # Early check for local dependencies if they're not allowed
         if not context.allow_local_dependencies:
-            local_deps = [dep for dep in hatch_dependencies if package_service.is_local_dependency(dep)]
+            local_deps = [
+                dep
+                for dep in hatch_dependencies
+                if package_service.is_local_dependency(dep)
+            ]
             if local_deps:
                 for dep in local_deps:
-                    logger.error(f"Local dependency '{dep.get('name')}' not allowed in this context")
-                    errors.append(f"Local dependency '{dep.get('name')}' not allowed in this context")
+                    logger.error(
+                        f"Local dependency '{dep.get('name')}' not allowed in this context"
+                    )
+                    errors.append(
+                        f"Local dependency '{dep.get('name')}' not allowed in this context"
+                    )
                 is_valid = False
                 return is_valid, errors
-        
+
         # Validate Hatch dependencies
         if hatch_dependencies:
             hatch_valid, hatch_errors = self._validate_hatch_dependencies(
@@ -102,7 +115,7 @@ class DependencyValidation(DependencyValidationStrategy):
             if not hatch_valid:
                 errors.extend(hatch_errors)
                 is_valid = False
-        
+
         # Validate Python dependencies format
         if python_dependencies:
             python_valid, python_errors = self._validate_python_dependencies(
@@ -111,39 +124,42 @@ class DependencyValidation(DependencyValidationStrategy):
             if not python_valid:
                 errors.extend(python_errors)
                 is_valid = False
-        
+
         return is_valid, errors
-    
-    def _validate_hatch_dependencies(self, hatch_dependencies: List[Dict], 
-                                   context: ValidationContext) -> Tuple[bool, List[str]]:
+
+    def _validate_hatch_dependencies(
+        self, hatch_dependencies: List[Dict], context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate Hatch package dependencies.
-        
+
         Args:
             hatch_dependencies (List[Dict]): List of Hatch dependency definitions
             context (ValidationContext): Validation context
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
         is_valid = True
-        
+
         # Step 1: Validate individual dependencies
         for dep in hatch_dependencies:
             dep_valid, dep_errors = self._validate_single_hatch_dependency(dep, context)
             if not dep_valid:
                 errors.extend(dep_errors)
                 is_valid = False
-        
+
         # Step 2: Build dependency graph and check for cycles
         try:
             hatch_dep_graph_builder = HatchDependencyGraphBuilder(
                 package_service=self.package_service,
-                registry_service=self.registry_service
+                registry_service=self.registry_service,
             )
-            dependency_graph = hatch_dep_graph_builder.build_dependency_graph(hatch_dependencies, context)
+            dependency_graph = hatch_dep_graph_builder.build_dependency_graph(
+                hatch_dependencies, context
+            )
             has_cycles, cycles = dependency_graph.detect_cycles()
-            
+
             if has_cycles:
                 for cycle in cycles:
                     cycle_str = " -> ".join(cycle)
@@ -155,115 +171,131 @@ class DependencyValidation(DependencyValidationStrategy):
             logger.error(f"Error building dependency graph: {e}")
             errors.append(f"Error analyzing dependency graph: {e}")
             is_valid = False
-        
+
         return is_valid, errors
-    
-    def _validate_single_hatch_dependency(self, dep: Dict, 
-                                        context: ValidationContext) -> Tuple[bool, List[str]]:
+
+    def _validate_single_hatch_dependency(
+        self, dep: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate a single Hatch dependency.
-        
+
         Args:
             dep (Dict): Dependency definition
             context (ValidationContext): Validation context
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
         is_valid = True
-        
+
         # Validate required fields
-        dep_name = dep.get('name')
+        dep_name = dep.get("name")
         if not dep_name:
             errors.append("Hatch dependency missing name")
             return False, errors
-        
+
         # Validate version constraint if present
-        version_constraint = dep.get('version_constraint')
+        version_constraint = dep.get("version_constraint")
         if version_constraint:
-            constraint_valid, constraint_error = self.version_validator.validate_constraint(version_constraint)
+            (
+                constraint_valid,
+                constraint_error,
+            ) = self.version_validator.validate_constraint(version_constraint)
             if not constraint_valid:
-                errors.append(f"Invalid version constraint for '{dep_name}': {constraint_error}")
+                errors.append(
+                    f"Invalid version constraint for '{dep_name}': {constraint_error}"
+                )
                 is_valid = False
-        
+
         if self.package_service.is_local_dependency(dep):
             local_valid, local_errors = self._validate_local_dependency(dep, context)
             if not local_valid:
                 errors.extend(local_errors)
                 is_valid = False
         else:
-            registry_valid, registry_errors = self._validate_registry_dependency(dep, context)
+            registry_valid, registry_errors = self._validate_registry_dependency(
+                dep, context
+            )
             if not registry_valid:
                 errors.extend(registry_errors)
                 is_valid = False
-        
+
         return is_valid, errors
-    
-    def _validate_local_dependency(self, dep: Dict, 
-                                 context: ValidationContext) -> Tuple[bool, List[str]]:
+
+    def _validate_local_dependency(
+        self, dep: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate a local file dependency.
-        
+
         Args:
             dep (Dict): Local dependency definition
             context (ValidationContext): Validation context
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
         is_valid = True
-        
-        dep_name = dep.get('name')
-        dep_type = dep.get('type', {})
-        uri = dep_type.get('uri')
-        
+
+        dep_name = dep.get("name")
+        dep_type = dep.get("type", {})
+        uri = dep_type.get("uri")
+
         # Validate URI
         if not uri:
             errors.append(f"Local dependency '{dep_name}' missing URI")
             return False, errors
-        
-        if not uri.startswith('file://'):
-            errors.append(f"Local dependency '{dep_name}' URI must start with 'file://'")
+
+        if not uri.startswith("file://"):
+            errors.append(
+                f"Local dependency '{dep_name}' URI must start with 'file://'"
+            )
             is_valid = False
         else:
             # Extract and validate path
             path_str = uri[7:]  # Remove "file://"
             path = Path(path_str)
-            
+
             # Resolve relative paths
             if context.package_dir and not path.is_absolute():
                 path = context.package_dir / path
-            
+
             # Check if path exists
             if not path.exists() or not path.is_dir():
-                errors.append(f"Local dependency '{dep_name}' path does not exist: {path}")
+                errors.append(
+                    f"Local dependency '{dep_name}' path does not exist: {path}"
+                )
                 is_valid = False
             else:
                 # Check for metadata file
                 metadata_path = path / "hatch_metadata.json"
                 if not metadata_path.exists():
-                    errors.append(f"Local dependency '{dep_name}' missing hatch_metadata.json: {metadata_path}")
+                    errors.append(
+                        f"Local dependency '{dep_name}' missing hatch_metadata.json: {metadata_path}"
+                    )
                     is_valid = False
-        
+
         return is_valid, errors
-    
-    def _validate_registry_dependency(self, dep: Dict, 
-                                    context: ValidationContext) -> Tuple[bool, List[str]]:
+
+    def _validate_registry_dependency(
+        self, dep: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate a registry dependency.
-        
+
         Args:
             dep (Dict): Registry dependency definition
             context (ValidationContext): Validation context
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
         is_valid = True
-    
-        dep_name = dep.get('name')
-        version_constraint = dep.get('version_constraint')
-        
+
+        dep_name = dep.get("name")
+        version_constraint = dep.get("version_constraint")
+
         # Check if package exists in registry
         exists, error = self.registry_service.validate_package_exists(dep_name)
         if not exists:
@@ -271,38 +303,51 @@ class DependencyValidation(DependencyValidationStrategy):
             is_valid = False
         elif version_constraint:
             # Check if the available version satisfies the constraint
-            version_compatible, version_error = self.registry_service.validate_version_compatibility(
-                dep_name, version_constraint)
+            (
+                version_compatible,
+                version_error,
+            ) = self.registry_service.validate_version_compatibility(
+                dep_name, version_constraint
+            )
             if not version_compatible:
-                errors.append(f"No version of '{dep_name}' satisfies constraint {version_constraint}: {version_error}")
+                errors.append(
+                    f"No version of '{dep_name}' satisfies constraint {version_constraint}: {version_error}"
+                )
                 is_valid = False
-        
+
         return is_valid, errors
-    
-    def _validate_python_dependencies(self, python_dependencies: List[Dict]) -> Tuple[bool, List[str]]:
+
+    def _validate_python_dependencies(
+        self, python_dependencies: List[Dict]
+    ) -> Tuple[bool, List[str]]:
         """Validate Python package dependencies format.
-        
+
         Args:
             python_dependencies (List[Dict]): List of Python dependency definitions
-            
+
         Returns:
             Tuple[bool, List[str]]: Validation result and errors
         """
         errors = []
         is_valid = True
-        
+
         for dep in python_dependencies:
-            dep_name = dep.get('name')
+            dep_name = dep.get("name")
             if not dep_name:
                 errors.append("Python dependency missing name")
                 is_valid = False
                 continue
-            
-            version_constraint = dep.get('version_constraint')
+
+            version_constraint = dep.get("version_constraint")
             if version_constraint:
-                constraint_valid, constraint_error = self.version_validator.validate_constraint(version_constraint)
+                (
+                    constraint_valid,
+                    constraint_error,
+                ) = self.version_validator.validate_constraint(version_constraint)
                 if not constraint_valid:
-                    errors.append(f"Invalid version constraint for Python dependency '{dep_name}': {constraint_error}")
+                    errors.append(
+                        f"Invalid version constraint for Python dependency '{dep_name}': {constraint_error}"
+                    )
                     is_valid = False
-        
+
         return is_valid, errors

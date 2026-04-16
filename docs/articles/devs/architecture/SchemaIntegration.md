@@ -145,11 +145,11 @@ The system automatically detects schema versions from metadata:
 def detect_schema_version(metadata: Dict[str, Any]) -> str:
     """Detect schema version from package metadata."""
     schema_version = metadata.get("package_schema_version")
-    
+
     if not schema_version:
         # Fallback to default version for legacy packages
         return "1.1.0"
-    
+
     # Normalize version format (remove 'v' prefix if present)
     return schema_version.lstrip('v')
 ```
@@ -163,23 +163,23 @@ class ValidatorFactory:
     @classmethod
     def create_validator_chain(cls, target_version: Optional[str] = None) -> Validator:
         """Create validator chain based on detected schema version."""
-        
+
         if target_version is None:
             # Use latest available version
             target_version = cls._version_order[0]
-        
+
         # Normalize version format
         target_version = target_version.lstrip('v')
-        
+
         # Create chain from target version to oldest
         target_index = cls._version_order.index(target_version)
         chain_versions = cls._version_order[target_index:]
-        
+
         # Build and link chain
         validators = [cls._validator_registry[v]() for v in chain_versions]
         for i in range(len(validators) - 1):
             validators[i].set_next(validators[i + 1])
-        
+
         return validators[0]
 ```
 
@@ -213,14 +213,14 @@ Validators use schema information for validation:
 class SchemaValidation:
     def validate(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
         """Validate metadata against appropriate schema."""
-        
+
         schema_version = metadata.get("package_schema_version", "1.1.0")
-        
+
         # Get appropriate schema from cache/repository
         schema = get_package_schema(schema_version)
         if not schema:
             return False, [f"Schema not available for version {schema_version}"]
-        
+
         # Validate metadata against schema
         try:
             jsonschema.validate(metadata, schema)
@@ -237,16 +237,16 @@ Package accessors adapt to schema structure changes:
 class V120PackageAccessor(HatchPkgAccessorBase):
     def get_dependencies(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Access dependencies based on v1.2.0 schema structure."""
-        
+
         # v1.2.0 introduced unified dependencies structure
         dependencies = metadata.get('dependencies', {})
-        
+
         # Validate structure matches expected schema
         expected_types = ['hatch', 'python', 'system', 'docker']
         for dep_type in dependencies:
             if dep_type not in expected_types:
                 logger.warning(f"Unexpected dependency type: {dep_type}")
-        
+
         return dependencies
 ```
 
@@ -258,16 +258,16 @@ Registry accessors handle registry schema evolution:
 class V110RegistryAccessor(RegistryAccessorBase):
     def can_handle(self, registry_data: Dict[str, Any]) -> bool:
         """Check if this accessor can handle the registry schema."""
-        
+
         # Check for v1.1.0 registry schema indicators
         schema_version = registry_data.get('registry_schema_version', '')
         if schema_version.startswith('1.1.'):
             return True
-        
+
         # Check for CrackingShells registry structure
         if 'repositories' in registry_data:
             return True
-        
+
         return False
 ```
 
@@ -293,40 +293,40 @@ The schema update process is coordinated across components:
 ```python
 def update_schemas() -> bool:
     """Coordinate schema updates across the system."""
-    
+
     # 1. Fetch latest schema information from GitHub
     fetcher = SchemaFetcher()
     latest_info = fetcher.get_latest_schema_info()
-    
+
     if not latest_info:
         logger.warning("Failed to fetch latest schema info")
         return False
-    
+
     # 2. Check for new schema versions
     cache = SchemaCache()
     current_info = cache.get_info()
-    
+
     updated = False
     for schema_type in ['package', 'registry']:
         current_version = current_info.get(f"latest_{schema_type}_version")
         latest_version = latest_info.get(f"latest_{schema_type}_version")
-        
+
         if current_version != latest_version:
             # 3. Download new schema
             schema_url = latest_info[schema_type]['url']
             schema_data = fetcher.download_schema(schema_url)
-            
+
             if schema_data:
                 # 4. Update cache
                 cache.save_schema(schema_type, schema_data, latest_version)
                 cache.save_schema(schema_type, schema_data)  # Also save as latest
                 updated = True
                 logger.info(f"Updated {schema_type} schema to {latest_version}")
-    
+
     # 5. Update cache metadata
     if updated:
         cache.update_info(latest_info)
-    
+
     return updated
 ```
 
@@ -339,10 +339,10 @@ class ValidatorFactory:
     @classmethod
     def _ensure_validators_loaded(cls) -> None:
         """Ensure validators are loaded and schemas are current."""
-        
+
         # Check for schema updates before loading validators
         schema_retriever.get_schema("package", "latest")  # Triggers update check
-        
+
         # Load validators based on available schemas
         if not cls._validator_registry:
             # Auto-discover and register validators
@@ -358,7 +358,7 @@ The system gracefully handles network failures:
 ```python
 def get_schema_with_fallback(schema_type: str, version: str) -> Optional[Dict[str, Any]]:
     """Get schema with network failure fallback."""
-    
+
     try:
         # Try to get latest schema (may trigger network request)
         return schema_retriever.get_schema(schema_type, version, force_update=True)
@@ -379,7 +379,7 @@ The system handles schema validation errors gracefully:
 ```python
 def validate_with_fallback(metadata: Dict, schema_version: str) -> Tuple[bool, List[str]]:
     """Validate with schema fallback."""
-    
+
     # Try validation with specific schema version
     schema = get_package_schema(schema_version)
     if schema:
@@ -388,7 +388,7 @@ def validate_with_fallback(metadata: Dict, schema_version: str) -> Tuple[bool, L
             return True, []
         except jsonschema.ValidationError as e:
             return False, [f"Schema validation error: {e.message}"]
-    
+
     # Fallback to latest schema if specific version unavailable
     latest_schema = get_package_schema("latest")
     if latest_schema:
@@ -398,7 +398,7 @@ def validate_with_fallback(metadata: Dict, schema_version: str) -> Tuple[bool, L
             return True, []
         except jsonschema.ValidationError as e:
             return False, [f"Schema validation error (latest): {e.message}"]
-    
+
     # No schema available - skip schema validation
     logger.error("No schema available for validation")
     return True, ["Schema validation skipped - no schema available"]
@@ -411,17 +411,17 @@ The system recovers from cache corruption:
 ```python
 def load_schema_with_recovery(schema_type: str, version: str) -> Optional[Dict[str, Any]]:
     """Load schema with corruption recovery."""
-    
+
     try:
         return cache.load_schema(schema_type, version)
     except (json.JSONDecodeError, IOError) as e:
         logger.warning(f"Cache corruption detected: {e}")
-        
+
         # Remove corrupted cache file
         cache_path = cache.get_schema_path(schema_type, version)
         if cache_path.exists():
             cache_path.unlink()
-        
+
         # Trigger fresh download
         return schema_retriever.get_schema(schema_type, version, force_update=True)
 ```
@@ -436,16 +436,16 @@ Schemas are loaded only when needed:
 class LazySchemaLoader:
     def __init__(self):
         self._schema_cache = {}
-    
+
     def get_schema(self, schema_type: str, version: str) -> Optional[Dict[str, Any]]:
         """Get schema with lazy loading."""
-        
+
         cache_key = f"{schema_type}:{version}"
-        
+
         if cache_key not in self._schema_cache:
             # Load schema on first access
             self._schema_cache[cache_key] = schema_retriever.get_schema(schema_type, version)
-        
+
         return self._schema_cache[cache_key]
 ```
 
@@ -458,7 +458,7 @@ import threading
 
 def background_schema_update():
     """Update schemas in background thread."""
-    
+
     def update_worker():
         try:
             schema_retriever.get_schema("package", "latest", force_update=True)
@@ -466,7 +466,7 @@ def background_schema_update():
             logger.info("Background schema update completed")
         except Exception as e:
             logger.error(f"Background schema update failed: {e}")
-    
+
     # Start background update
     update_thread = threading.Thread(target=update_worker, daemon=True)
     update_thread.start()

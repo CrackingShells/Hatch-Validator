@@ -26,7 +26,7 @@ package "Factory Classes" {
         + {static} register_validator(version: str, validator_class: Type[Validator]): void
         + {static} _build_chain(validators: List[Validator]): Validator
     }
-    
+
     class HatchPkgAccessorFactory {
         - {static} _accessor_registry: Dict[str, Type[HatchPkgAccessor]]
         - {static} _version_order: List[str] = ["1.2.1", "1.2.0", "1.1.0"]
@@ -34,7 +34,7 @@ package "Factory Classes" {
         + {static} register_accessor(version: str, accessor_class: Type[HatchPkgAccessor]): void
         + {static} _build_chain(accessors: List[HatchPkgAccessor]): HatchPkgAccessor
     }
-    
+
     class RegistryAccessorFactory {
         //Dynamic Creation: Detects registry format and creates appropriate accessor instance//
         ..
@@ -52,11 +52,11 @@ package "Created Components" {
     class V121Validator
     class V120Validator
     class V110Validator
-    
+
     class V121PackageAccessor
     class V120PackageAccessor
     class V110PackageAccessor
-    
+
     class V110RegistryAccessor
 }
 
@@ -75,12 +75,12 @@ package "Chain Structure" {
         head: V121Validator
         V121 -> V120 -> V110
     }
-    
+
     object "Package Accessor Chain" as PAC {
         head: V121PackageAccessor
         V121 -> V120 -> V110
     }
-    
+
     object "Registry Accessor" as RA {
         single: V110RegistryAccessor
     }

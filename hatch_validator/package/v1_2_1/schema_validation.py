@@ -20,18 +20,20 @@ logger = logging.getLogger("hatch.schema.v1_2_1.schema_validation")
 
 class SchemaValidation(SchemaValidationStrategy):
     """Strategy for validating metadata against v1.2.1 schema.
-    
+
     This strategy validates packages against the v1.2.1 schema which requires
     dual entry point configuration with mcp_server and hatch_mcp_server fields.
     """
-    
-    def validate_schema(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+
+    def validate_schema(
+        self, metadata: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate metadata against v1.2.1 schema.
-        
+
         Args:
             metadata (Dict): Package metadata to validate against schema
             context (ValidationContext): Validation context with resources
-            
+
         Returns:
             Tuple[bool, List[str]]: Tuple containing:
                 - bool: Whether schema validation was successful
@@ -39,17 +41,21 @@ class SchemaValidation(SchemaValidationStrategy):
         """
         try:
             # Load schema for v1.2.1
-            schema = get_package_schema(version="1.2.1", force_update=context.force_schema_update)
+            schema = get_package_schema(
+                version="1.2.1", force_update=context.force_schema_update
+            )
             if not schema:
                 error_msg = "Failed to load package schema version 1.2.1"
                 logger.error(error_msg)
                 return False, [error_msg]
-            
+
             # Validate against schema
             jsonschema.validate(instance=metadata, schema=schema)
-            logger.debug("Package metadata successfully validated against v1.2.1 schema")
+            logger.debug(
+                "Package metadata successfully validated against v1.2.1 schema"
+            )
             return True, []
-            
+
         except jsonschema.ValidationError as e:
             error_msg = f"Schema validation failed: {e.message}"
             if e.absolute_path:

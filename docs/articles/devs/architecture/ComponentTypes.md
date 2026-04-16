@@ -86,12 +86,12 @@ Package Accessors provide unified access to package metadata across schema versi
 class HatchPkgAccessor(ABC):
     def __init__(self, next_accessor: Optional['HatchPkgAccessor'] = None):
         self.next_accessor = next_accessor
-    
+
     @abstractmethod
     def can_handle(self, schema_version: str) -> bool:
         """Determine if this accessor can handle the schema version."""
         pass
-    
+
     def get_dependencies(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Get dependencies or delegate to next accessor."""
         if self.next_accessor:
@@ -147,12 +147,12 @@ Registry Accessors enable consistent registry data access regardless of registry
 class RegistryAccessorBase(ABC):
     def __init__(self, successor: Optional['RegistryAccessorBase'] = None):
         self._successor = successor
-    
+
     @abstractmethod
     def can_handle(self, registry_data: Dict[str, Any]) -> bool:
         """Check if this accessor can handle the registry data."""
         pass
-    
+
     def handle_request(self, registry_data: Dict[str, Any]) -> Optional['RegistryAccessorBase']:
         """Handle request using chain of responsibility pattern."""
         if self.can_handle(registry_data):
@@ -189,7 +189,7 @@ class PackageService:
             # Create package accessor chain
             schema_version = metadata.get("package_schema_version")
             self._accessor = HatchPkgAccessorFactory.create_accessor_chain(schema_version)
-    
+
     def get_dependencies(self) -> Dict[str, Any]:
         """Use accessor chain for version-agnostic dependency access."""
         return self._accessor.get_dependencies(self._metadata)
@@ -204,7 +204,7 @@ class RegistryService:
         if registry_data:
             # Create registry accessor chain
             self._accessor = RegistryAccessorFactory.create_accessor_for_data(registry_data)
-    
+
     def package_exists(self, package_name: str) -> bool:
         """Use accessor chain for version-agnostic registry operations."""
         return self._accessor.package_exists(self._registry_data, package_name)
@@ -216,20 +216,20 @@ class RegistryService:
 class HatchPackageValidator:
     def validate_package(self, package_path: Path) -> Tuple[bool, Dict[str, Any]]:
         """Use validator chain for version-agnostic validation."""
-        
+
         # Load metadata and detect schema version
         with open(package_path / "hatch_metadata.json", 'r') as f:
             metadata = json.load(f)
-        
+
         schema_version = metadata.get("package_schema_version")
-        
+
         # Create validator chain
         validator = ValidatorFactory.create_validator_chain(schema_version)
-        
+
         # Execute validation through chain
         context = ValidationContext(registry_data=self.registry_data)
         is_valid, errors = validator.validate(metadata, context)
-        
+
         return is_valid, self._format_results(is_valid, errors, metadata)
 ```
 
@@ -246,16 +246,16 @@ class DependencyValidation:
         # Use package accessor for version-agnostic dependency access
         package_service = PackageService(metadata)
         dependencies = package_service.get_dependencies()
-        
+
         # Use registry accessor for dependency existence validation
         registry_service = RegistryService(context.registry_data)
-        
+
         errors = []
         for dep_type, deps in dependencies.items():
             for dep in deps:
                 if not registry_service.package_exists(dep['name']):
                     errors.append(f"Dependency {dep['name']} not found in registry")
-        
+
         return len(errors) == 0, errors
 ```
 
@@ -271,18 +271,18 @@ Factory classes coordinate component creation:
 # Coordinated factory usage
 def create_validation_system(metadata: Dict[str, Any], registry_data: Dict[str, Any]):
     """Create coordinated validation system with all component types."""
-    
+
     schema_version = metadata.get("package_schema_version")
-    
+
     # Create coordinated chains
     validator = ValidatorFactory.create_validator_chain(schema_version)
     package_accessor = HatchPkgAccessorFactory.create_accessor_chain(schema_version)
     registry_accessor = RegistryAccessorFactory.create_accessor_for_data(registry_data)
-    
+
     # Create coordinated services
     package_service = PackageService(metadata)
     registry_service = RegistryService(registry_data)
-    
+
     return {
         'validator': validator,
         'package_service': package_service,

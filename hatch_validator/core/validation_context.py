@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 
 class ValidationContext:
     """Context object that carries validation state through the validator chain.
-    
+
     This context provides a consistent interface for passing validation resources
     and state between validators and strategies in the chain.
 
@@ -18,11 +18,16 @@ class ValidationContext:
     registry data, and flags for local dependencies and schema updates. Additional
     data can be stored and retrieved using the `set_data` and `get_data` methods.
     """
-    
-    def __init__(self, package_dir: Optional[Path] = None, registry_data: Optional[Dict] = None,
-                 allow_local_dependencies: bool = True, force_schema_update: bool = False):
+
+    def __init__(
+        self,
+        package_dir: Optional[Path] = None,
+        registry_data: Optional[Dict] = None,
+        allow_local_dependencies: bool = True,
+        force_schema_update: bool = False,
+    ):
         """Initialize validation context.
-        
+
         Args:
             package_dir (Path, optional): Path to the package being validated. Defaults to None.
             registry_data (Dict, optional): Registry data for dependency validation. Defaults to None.
@@ -34,23 +39,23 @@ class ValidationContext:
         self.allow_local_dependencies = allow_local_dependencies
         self.force_schema_update = force_schema_update
         self.additional_data = {}
-    
+
     def set_data(self, key: str, value: Any) -> None:
         """Set additional data in the context.
-        
+
         Args:
             key (str): Key for the data
             value (Any): Value to store
         """
         self.additional_data[key] = value
-    
+
     def get_data(self, key: str, default: Any = None) -> Any:
         """Get additional data from the context.
-        
+
         Args:
             key (str): Key for the data
             default (Any, optional): Default value if key not found. Defaults to None.
-            
+
         Returns:
             Any: Value associated with the key or default
         """

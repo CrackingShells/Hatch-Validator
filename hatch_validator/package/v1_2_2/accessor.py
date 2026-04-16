@@ -8,9 +8,12 @@ the new channel field in Python dependencies.
 
 import logging
 from typing import Dict, Any
-from hatch_validator.core.pkg_accessor_base import HatchPkgAccessor as HatchPkgAccessorBase
+from hatch_validator.core.pkg_accessor_base import (
+    HatchPkgAccessor as HatchPkgAccessorBase,
+)
 
 logger = logging.getLogger("hatch.package.v1_2_2.accessor")
+
 
 class HatchPkgAccessor(HatchPkgAccessorBase):
     """Metadata accessor for Hatch package schema version 1.2.2.
@@ -43,5 +46,4 @@ class HatchPkgAccessor(HatchPkgAccessorBase):
         Returns:
             Any: Channel value (e.g., "conda-forge", "bioconda"), or None if not specified
         """
-        return dependency.get('channel')
-
+        return dependency.get("channel")

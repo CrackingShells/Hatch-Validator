@@ -27,8 +27,8 @@ class TestPackageValidatorV200(unittest.TestCase):
             "name": "test-package",
             "authors": [
                 {"name": "Author One", "email": "one@example.com"},
-                {"name": "Author Two", "email": "two@example.com"}
-            ]
+                {"name": "Author Two", "email": "two@example.com"},
+            ],
         }
 
         service = PackageService()

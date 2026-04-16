@@ -13,7 +13,7 @@ package "Core Pattern" {
         + validate(data): result
         + set_next(validator): void
     }
-    
+
     abstract class RegistryAccessorBase {
         + can_handle(data): bool
         + process(data): result
@@ -23,7 +23,7 @@ package "Core Pattern" {
         + get_data(metadata): data
         + set_next(accessor): void
     }
-    
+
 }
 
 package "Version Implementations" {
@@ -31,32 +31,32 @@ package "Version Implementations" {
         + can_handle(): bool
         + validate(): result
     }
-    
+
     class V1_2_0_Validator {
         + can_handle(): bool
         + validate(): result
     }
-    
+
     class V1_1_0_Validator {
         + can_handle(): bool
         + validate(): result
     }
-    
+
     class V1_2_1_PackageAccessor {
         + can_handle(): bool
         + get_data(): data
     }
-    
+
     class V1_2_0_PackageAccessor {
         + can_handle(): bool
         + get_data(): data
     }
-    
+
     class V1_1_0_PackageAccessor {
         + can_handle(): bool
         + get_data(): data
     }
-    
+
     class V1_1_0_RegistryAccessor {
         + can_handle(): bool
         + process(): result

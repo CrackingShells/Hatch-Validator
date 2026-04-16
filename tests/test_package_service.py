@@ -28,7 +28,7 @@ DUMMY_METADATA_V110 = {
     "compatibility": {"hatchling": ">=0.1.0", "python": ">=3.7"},
     "entry_point": "dummy_pkg_v110.main:main",
     "tools": [{"name": "tool1", "description": "A tool"}],
-    "citations": {"origin": "", "mcp": ""}
+    "citations": {"origin": "", "mcp": ""},
 }
 
 # Dummy package metadata for v1.2.0
@@ -44,23 +44,29 @@ DUMMY_METADATA_V120 = {
     "repository": "https://example.com/repo2",
     "documentation": "https://example.com/docs2",
     "dependencies": {
-        "hatch": [
-            {"name": "base_pkg_2", "version_constraint": ">=2.0.0"}
-        ],
+        "hatch": [{"name": "base_pkg_2", "version_constraint": ">=2.0.0"}],
         "python": [
-            {"name": "numpy", "version_constraint": ">=1.18.0", "package_manager": "pip"}
+            {
+                "name": "numpy",
+                "version_constraint": ">=1.18.0",
+                "package_manager": "pip",
+            }
         ],
         "system": [
-            {"name": "libssl", "version_constraint": ">=1.1.1", "package_manager": "apt"}
+            {
+                "name": "libssl",
+                "version_constraint": ">=1.1.1",
+                "package_manager": "apt",
+            }
         ],
         "docker": [
             {"name": "ubuntu", "version_constraint": "==20.04", "registry": "dockerhub"}
-        ]
+        ],
     },
     "compatibility": {"hatchling": ">=0.2.0", "python": ">=3.8"},
     "entry_point": "dummy_pkg_v120.main:main",
     "tools": [{"name": "tool2", "description": "Another tool"}],
-    "citations": {"origin": "", "mcp": ""}
+    "citations": {"origin": "", "mcp": ""},
 }
 
 # Dummy package metadata for v1.2.1
@@ -76,22 +82,24 @@ DUMMY_METADATA_V121 = {
     "repository": "https://example.com/repo3",
     "documentation": "https://example.com/docs3",
     "dependencies": {
-        "hatch": [
-            {"name": "base_pkg_3", "version_constraint": ">=3.0.0"}
-        ],
+        "hatch": [{"name": "base_pkg_3", "version_constraint": ">=3.0.0"}],
         "python": [
-            {"name": "fastapi", "version_constraint": ">=0.68.0", "package_manager": "pip"}
+            {
+                "name": "fastapi",
+                "version_constraint": ">=0.68.0",
+                "package_manager": "pip",
+            }
         ],
         "system": [],
-        "docker": []
+        "docker": [],
     },
     "compatibility": {"hatchling": ">=0.3.0", "python": ">=3.9"},
     "entry_point": {
         "mcp_server": "mcp_server.py",
-        "hatch_mcp_server": "hatch_mcp_server.py"
+        "hatch_mcp_server": "hatch_mcp_server.py",
     },
     "tools": [{"name": "tool3", "description": "A dual entry point tool"}],
-    "citations": {"origin": "", "mcp": ""}
+    "citations": {"origin": "", "mcp": ""},
 }
 
 DUMMY_METADATA_V200 = {
@@ -103,35 +111,42 @@ DUMMY_METADATA_V200 = {
     "authors": [{"name": "Frank", "email": "frank@example.com"}],
     "license": {"name": "MIT"},
     "documentation": "https://example.com/docs4",
-    "provenance": {
-        "source": "internal"
-    },
+    "provenance": {"source": "internal"},
     "dependencies": {
-        "hatch": [
-            {"name": "base_pkg_4", "version_constraint": ">=0.0.0"}
-        ],
+        "hatch": [{"name": "base_pkg_4", "version_constraint": ">=0.0.0"}],
         "python": [
-            {"name": "pydantic", "version_constraint": ">=1.0.0", "package_manager": "pip"}
+            {
+                "name": "pydantic",
+                "version_constraint": ">=1.0.0",
+                "package_manager": "pip",
+            }
         ],
         "system": [
-            {"name": "libssl", "version_constraint": ">=1.1.1", "package_manager": "apt"}
+            {
+                "name": "libssl",
+                "version_constraint": ">=1.1.1",
+                "package_manager": "apt",
+            }
         ],
         "docker": [
             {
                 "name": "ubuntu",
                 "tag": "20.04",
                 "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                "registry": "dockerhub"
+                "registry": "dockerhub",
             }
-        ]
+        ],
     },
     "entry_point": {
         "mcp_server": "mcp_server.py",
-        "hatch_mcp_server": "hatch_mcp_server.py"
+        "hatch_mcp_server": "hatch_mcp_server.py",
     },
     "tools": [{"name": "tool4", "desc": "A v2 tool"}],
-    "citations": [{"format": "formatted", "value": "A sample citation", "note": "Test citation"}]
+    "citations": [
+        {"format": "formatted", "value": "A sample citation", "note": "Test citation"}
+    ],
 }
+
 
 class TestPackageService(unittest.TestCase):
     """Tests for the PackageService and concrete package accessors."""
@@ -219,7 +234,10 @@ class TestPackageService(unittest.TestCase):
         self.assertEqual(deps["python"][0]["name"], "pydantic")
         self.assertEqual(deps["system"][0]["name"], "libssl")
         self.assertEqual(deps["docker"][0]["tag"], "20.04")
-        self.assertEqual(deps["docker"][0]["digest"], "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+        self.assertEqual(
+            deps["docker"][0]["digest"],
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
 
     def test_version_routing(self):
         """Test that PackageService routes to correct accessor based on schema version."""
@@ -240,6 +258,7 @@ class TestPackageService(unittest.TestCase):
         self.assertTrue(service_v121.is_loaded())
         entry_point_v121 = service_v121.get_entry_point()
         self.assertIsInstance(entry_point_v121, dict)
+
 
 if __name__ == "__main__":
     unittest.main()

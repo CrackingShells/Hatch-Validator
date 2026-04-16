@@ -19,7 +19,9 @@ logger.setLevel(logging.DEBUG)
 class DependencyValidation(DependencyValidationStrategy):
     """Strategy for validating Docker dependencies according to v2.0.0 schema."""
 
-    def validate_dependencies(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+    def validate_dependencies(
+        self, metadata: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate Docker dependencies according to v2.0.0 schema.
 
         Hatch, Python, and System dependency validation is handled by the
@@ -41,13 +43,15 @@ class DependencyValidation(DependencyValidationStrategy):
                 package_service = PackageService(metadata)
 
             dependencies = package_service.get_dependencies()
-            docker_dependencies = dependencies.get('docker', [])
+            docker_dependencies = dependencies.get("docker", [])
 
             errors = []
             is_valid = True
 
             if docker_dependencies:
-                docker_valid, docker_errors = self._validate_docker_dependencies(docker_dependencies, context)
+                docker_valid, docker_errors = self._validate_docker_dependencies(
+                    docker_dependencies, context
+                )
                 if not docker_valid:
                     errors.extend(docker_errors)
                     is_valid = False
@@ -56,25 +60,31 @@ class DependencyValidation(DependencyValidationStrategy):
             logger.error(f"Error during Docker dependency validation: {e}")
             return False, [f"Error during Docker dependency validation: {e}"]
 
-        logger.debug(f"Docker dependency validation result: {is_valid}, errors: {errors}")
+        logger.debug(
+            f"Docker dependency validation result: {is_valid}, errors: {errors}"
+        )
         return is_valid, errors
 
-    def _validate_docker_dependencies(self, docker_dependencies: List[Dict],
-                                      context: ValidationContext) -> Tuple[bool, List[str]]:
+    def _validate_docker_dependencies(
+        self, docker_dependencies: List[Dict], context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate Docker image dependencies."""
         errors = []
         is_valid = True
 
         for dep in docker_dependencies:
-            dep_valid, dep_errors = self._validate_single_docker_dependency(dep, context)
+            dep_valid, dep_errors = self._validate_single_docker_dependency(
+                dep, context
+            )
             if not dep_valid:
                 errors.extend(dep_errors)
                 is_valid = False
 
         return is_valid, errors
 
-    def _validate_single_docker_dependency(self, dep: Dict,
-                                           context: ValidationContext) -> Tuple[bool, List[str]]:
+    def _validate_single_docker_dependency(
+        self, dep: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate a single Docker dependency.
 
         Structural checks (digest presence, digest pattern, version_constraint rejection)
@@ -83,19 +93,21 @@ class DependencyValidation(DependencyValidationStrategy):
         errors = []
         is_valid = True
 
-        dep_name = dep.get('name')
+        dep_name = dep.get("name")
         if not dep_name:
             errors.append("Docker dependency missing name")
             return False, errors
 
-        tag = dep.get('tag')
+        tag = dep.get("tag")
         if tag is not None and not isinstance(tag, str):
             errors.append(f"Invalid Docker tag for '{dep_name}'. Must be a string")
             is_valid = False
 
-        registry = dep.get('registry')
+        registry = dep.get("registry")
         if registry is not None and not isinstance(registry, str):
-            errors.append(f"Invalid registry value for Docker dependency '{dep_name}'. Must be a string")
+            errors.append(
+                f"Invalid registry value for Docker dependency '{dep_name}'. Must be a string"
+            )
             is_valid = False
 
         return is_valid, errors

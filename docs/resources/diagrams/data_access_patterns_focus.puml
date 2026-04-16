@@ -25,21 +25,21 @@ alt v1.2.1 specific handling
     PA121 -> PA121 : extract_dual_entry_points()
     PA121 -> PA120 : get_dependencies(metadata)
     activate PA120
-    
+
     note over PA120 : **Version Check**\nif schema_version in ["1.2.0", "1.2.1"]:\n  handle unified dependencies\nelse: delegate
-    
+
     PA120 -> PA120 : extract_unified_dependencies()
     PA120 --> PA121 : dependency_data
     deactivate PA120
-    
+
 else direct delegation
     PA121 -> PA120 : get_dependencies(metadata)
     activate PA120
     PA120 -> PA110 : get_dependencies(metadata)
     activate PA110
-    
+
     note over PA110 : **Terminal Handler**\nImplements all base\nmetadata extraction
-    
+
     PA110 -> PA110 : extract_basic_dependencies()
     PA110 --> PA120 : dependency_data
     deactivate PA110

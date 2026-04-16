@@ -24,7 +24,7 @@ package "Strategy Interfaces" {
       class V120DependencyValidation {
           + validate_dependencies(): result
       }
-      
+
       class V110DependencyValidation {
           + validate_dependencies(): result
       }
@@ -48,7 +48,7 @@ package "Strategy Interfaces" {
       class V121ToolsValidation {
           + validate_tools(): result
       }
-      
+
       class V110ToolsValidation {
           + validate_tools(): result
       }
@@ -56,7 +56,7 @@ package "Strategy Interfaces" {
       abstract class SchemaValidationStrategy {
           + {abstract} validate_schema(metadata: Dict, context: ValidationContext): Tuple[bool, List[str]]
       }
-        
+
       class V110SchemaValidation {
           + validate_schema(): result
       }
@@ -87,12 +87,12 @@ package "Context Classes" {
         - tools_strategy: ToolsValidationStrategy
         + validate(metadata, context): result
     }
-    
+
     class V120Validator {
         - dependency_strategy: DependencyValidationStrategy
         + validate(metadata, context): result
     }
-    
+
     class V110Validator {
         //Terminal Validator: Implements all strategies. No delegation needed.//
         ..

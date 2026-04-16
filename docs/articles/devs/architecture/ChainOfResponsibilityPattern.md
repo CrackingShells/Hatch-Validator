@@ -89,17 +89,17 @@ All component types follow the same abstract base class pattern (replace `Compon
 class ComponentBase(ABC):
     def __init__(self, next_component: Optional['ComponentBase'] = None):
         self.next_component = next_component
-    
+
     @abstractmethod
     def can_handle(self, version_or_data) -> bool:
         """Determine if this component can handle the given version/data."""
         pass
-    
+
     def set_next(self, component: 'ComponentBase') -> 'ComponentBase':
         """Set the next component in the chain."""
         self.next_component = component
         return component
-    
+
     # Delegation methods follow the same pattern:
     def operation(self, data):
         """Perform operation or delegate to next component."""
@@ -117,30 +117,30 @@ All component types use identical factory patterns for chain construction (repla
 class ComponentFactory:
     _component_registry: Dict[str, Type[ComponentBase]] = {}
     _version_order: List[str] = []  # Newest to oldest
-    
+
     @classmethod
     def create_component_chain(cls, target_version: Optional[str] = None) -> ComponentBase:
         """Create component chain from target version to oldest."""
-        
+
         # Determine target version (latest if not specified)
         if target_version is None:
             target_version = cls._version_order[0]
-        
+
         # Create chain starting from target version down to oldest
         target_index = cls._version_order.index(target_version)
         chain_versions = cls._version_order[target_index:]
-        
+
         # Create components in order (newest to oldest)
         components = []
         for version in chain_versions:
             component_class = cls._component_registry[version]
             component = component_class()
             components.append(component)
-        
+
         # Link components (each points to the next older one)
         for i in range(len(components) - 1):
             components[i].set_next(components[i + 1])
-        
+
         return components[0]  # Return head of chain
 ```
 
@@ -155,7 +155,7 @@ Each component type implements delegation for unchanged concerns:
 ```python
 class V121PackageAccessor(HatchPkgAccessorBase):
     """v1.2.1 accessor - handles dual entry points, delegates dependencies."""
-    
+
     def get_entry_points(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Handle dual entry point access for v1.2.1."""
         # v1.2.1-specific logic for dual entry points
@@ -163,7 +163,7 @@ class V121PackageAccessor(HatchPkgAccessorBase):
             'mcp_server': metadata.get('mcp_server', {}),
             'hatch_mcp_server': metadata.get('hatch_mcp_server', {})
         }
-    
+
     def get_dependencies(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Delegate dependency access to v1.2.0."""
         if self.next_accessor:
@@ -172,12 +172,12 @@ class V121PackageAccessor(HatchPkgAccessorBase):
 
 class V120PackageAccessor(HatchPkgAccessorBase):
     """v1.2.0 accessor - handles unified dependencies, delegates basic fields."""
-    
+
     def get_dependencies(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Handle unified dependency structure for v1.2.0."""
         # v1.2.0-specific logic for unified dependencies
         return metadata.get('dependencies', {})
-    
+
     def get_name(self, metadata: Dict[str, Any]) -> str:
         """Delegate basic field access to v1.1.0."""
         if self.next_accessor:
@@ -223,11 +223,11 @@ class ValidatorFactory:
             # Import and register v1.2.1 validator (newest first)
             from hatch_validator.package.v1_2_1.validator import Validator as V121Validator
             cls.register_validator('1.2.1', V121Validator)
-            
+
             # Import and register v1.2.0 validator
             from hatch_validator.package.v1_2_0.validator import Validator as V120Validator
             cls.register_validator('1.2.0', V120Validator)
-            
+
             # Import and register v1.1.0 validator
             from hatch_validator.package.v1_1_0.validator import Validator as V110Validator
             cls.register_validator('1.1.0', V110Validator)
@@ -362,14 +362,14 @@ To add support for a new schema version (e.g., v1.3.0):
 ```python
 class V130PackageAccessor(HatchPkgAccessorBase):
     """v1.3.0 accessor - handles new features, delegates unchanged concerns."""
-    
+
     def can_handle(self, schema_version: str) -> bool:
         return schema_version == "1.3.0"
-    
+
     def get_new_feature(self, metadata: Dict[str, Any]) -> Any:
         """Handle v1.3.0-specific new feature."""
         return metadata.get('new_feature', {})
-    
+
     # All others are automatically delegated from HatchPkgAccessorBase implementation
 ```
 
@@ -423,11 +423,11 @@ def operation(self, data):
             return self._handle_operation(data)
     except Exception as e:
         logger.warning(f"Component {self.__class__.__name__} failed: {e}")
-    
+
     # Delegate to next component
     if self.next_component:
         return self.next_component.operation(data)
-    
+
     # No component could handle the operation
     raise NotImplementedError(f"No component can handle operation for {data}")
 ```

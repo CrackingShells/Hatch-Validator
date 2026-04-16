@@ -6,12 +6,13 @@ version-aware access to all top-level fields and dependencies.
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 from hatch_validator.core.pkg_accessor_factory import HatchPkgAccessorFactory
 from hatch_validator.core.pkg_accessor_base import HatchPkgAccessor
 
 logger = logging.getLogger("hatch.package_service")
+
 
 class PackageService:
     """Service for package metadata operations.
@@ -21,6 +22,7 @@ class PackageService:
     This service uses the accessor chain pattern to handle different
     package schema versions automatically.
     """
+
     def __init__(self, metadata: Optional[Dict[str, Any]] = None):
         """Initialize the package service.
 
@@ -42,15 +44,19 @@ class PackageService:
             ValueError: If no accessor can handle the package metadata.
         """
         self._metadata = metadata
-        schema_version = metadata.get("hatch_schema_version") or metadata.get("package_schema_version")
+        schema_version = metadata.get("hatch_schema_version") or metadata.get(
+            "package_schema_version"
+        )
 
         if not schema_version:
-            raise ValueError("Missing schema version in metadata. Expected 'hatch_schema_version' or 'package_schema_version'.")
-        
+            raise ValueError(
+                "Missing schema version in metadata. Expected 'hatch_schema_version' or 'package_schema_version'."
+            )
+
         self._accessor = HatchPkgAccessorFactory.create_accessor_chain(schema_version)
         if not self._accessor:
             raise ValueError(f"No accessor found for schema version: {schema_version}")
-        
+
         logger.debug(f"Loaded package metadata with schema version: {schema_version}")
 
     def is_loaded(self) -> bool:
@@ -92,7 +98,9 @@ class PackageService:
             raise ValueError("Package metadata is not loaded.")
         return self._accessor.get_dependencies(self._metadata)
 
-    def is_local_dependency(self, dep: Dict[str, Any], root_dir: Optional[Path] = None) -> bool:
+    def is_local_dependency(
+        self, dep: Dict[str, Any], root_dir: Optional[Path] = None
+    ) -> bool:
         """Check if a dependency is local.
 
         Args:

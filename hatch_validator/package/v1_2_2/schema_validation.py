@@ -25,7 +25,9 @@ class SchemaValidation(SchemaValidationStrategy):
     conda package manager support for Python dependencies.
     """
 
-    def validate_schema(self, metadata: Dict, context: ValidationContext) -> Tuple[bool, List[str]]:
+    def validate_schema(
+        self, metadata: Dict, context: ValidationContext
+    ) -> Tuple[bool, List[str]]:
         """Validate metadata against v1.2.2 schema.
 
         Args:
@@ -39,7 +41,9 @@ class SchemaValidation(SchemaValidationStrategy):
         """
         try:
             # Load schema for v1.2.2
-            schema = get_package_schema(version="1.2.2", force_update=context.force_schema_update)
+            schema = get_package_schema(
+                version="1.2.2", force_update=context.force_schema_update
+            )
             if not schema:
                 error_msg = "Failed to load package schema version 1.2.2"
                 logger.error(error_msg)
@@ -47,7 +51,9 @@ class SchemaValidation(SchemaValidationStrategy):
 
             # Validate against schema
             jsonschema.validate(instance=metadata, schema=schema)
-            logger.debug("Package metadata successfully validated against v1.2.2 schema")
+            logger.debug(
+                "Package metadata successfully validated against v1.2.2 schema"
+            )
             return True, []
 
         except jsonschema.ValidationError as e:
@@ -60,4 +66,3 @@ class SchemaValidation(SchemaValidationStrategy):
             error_msg = f"Unexpected error during schema validation: {str(e)}"
             logger.error(error_msg)
             return False, [error_msg]
-
