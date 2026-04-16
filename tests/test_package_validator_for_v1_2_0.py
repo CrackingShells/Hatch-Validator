@@ -306,7 +306,7 @@ class TestHatchPackageValidator_v1_2_0(unittest.TestCase):
         with open(pkg_path / "hatch_metadata.json", "r") as f:
             metadata = json.load(f)
             is_valid, results = self.validator.validate_package(
-                pkg_path, (metadata.get("name"), metadata)
+                pkg_path, pending_update=(metadata.get("name"), metadata)
             )
 
             self.assertFalse(

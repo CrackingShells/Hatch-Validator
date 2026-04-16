@@ -88,7 +88,7 @@ class HatchDependencyGraphBuilder:
         for dep in hatch_dependencies:
             if self.package_service.is_local_dependency(dep, context.package_dir):
                 self._add_local_dependency_graph(
-                    pkg_name, dep, graph, context, context.package_dir
+                    pkg_name, dep, graph, context, context.package_dir, processed
                 )
 
             else:
@@ -154,6 +154,7 @@ class HatchDependencyGraphBuilder:
         graph: DependencyGraph,
         context: ValidationContext,
         root_dir: Optional[Path] = None,
+        processed: Set[str] = None,
     ):
         """Add local dependency and its transitive dependencies to the graph.
 
@@ -164,10 +165,16 @@ class HatchDependencyGraphBuilder:
             context (ValidationContext): Validation context
             root_dir (Path): Root directory of the package depending on this local dependency
         """
+        if processed is None:
+            processed = set()
+
         try:
             local_pkg_metadata = self._get_local_dep_pkg_metadata(dep, root_dir)
             local_pkg_service = PackageService(local_pkg_metadata)
             local_pkg_name = local_pkg_service.get_field("name")
+
+            if not local_pkg_name:
+                return
 
             path = self._get_local_dependency_path(dep, root_dir)
             remote_dep_obj = {
@@ -180,17 +187,22 @@ class HatchDependencyGraphBuilder:
             }
             graph.add_dependency(parent_pkg_name, remote_dep_obj)
 
+            if local_pkg_name in processed:
+                return
+
+            processed.add(local_pkg_name)
+
             deps_obj = local_pkg_service.get_dependencies()
             hatch_deps = deps_obj.get("hatch", [])
 
             for dep in hatch_deps:
                 if self.package_service.is_local_dependency(dep, path):
                     self._add_local_dependency_graph(
-                        local_pkg_name, dep, graph, context, path
+                        local_pkg_name, dep, graph, context, path, processed
                     )
                 else:
                     self._add_remote_dependency_graph(
-                        local_pkg_name, dep, graph, context
+                        local_pkg_name, dep, graph, context, processed
                     )
 
         except Exception as e:
@@ -225,10 +237,9 @@ class HatchDependencyGraphBuilder:
             processed = set()
         dep_name = dep.get("name")
 
-        if not dep_name or dep_name in processed:
+        if not dep_name:
             return
 
-        processed.add(dep_name)
         try:
             version_constraint = dep.get("version_constraint")
             compatible_version = self.registry_service.find_compatible_version(
@@ -245,6 +256,11 @@ class HatchDependencyGraphBuilder:
                 ),
             }
             graph.add_dependency(parent_pkg_name, remote_dep_obj)
+
+            if dep_name in processed:
+                return
+
+            processed.add(dep_name)
 
             hatch_deps_obj = self.registry_service.get_package_dependencies(
                 dep_name, compatible_version

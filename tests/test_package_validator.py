@@ -314,7 +314,7 @@ class TestHatchPackageValidator(unittest.TestCase):
 
             # Validate - should detect the circular dependency
             is_valid, results = self.validator.validate_package(
-                pkg_path, ("circular_dep_pkg_2", metadata)
+                pkg_path, pending_update=("circular_dep_pkg_2", metadata)
             )
 
             self.assertFalse(
